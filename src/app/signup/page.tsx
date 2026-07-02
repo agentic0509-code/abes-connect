@@ -5,24 +5,83 @@ import { signup } from '@/app/auth/actions';
 import Link from 'next/link';
 
 export default function SignupPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Password criteria evaluations
+  const criteria = {
+    hasMinLength: password.length >= 8,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+    hasSpecialChar: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+  };
+
+  const satisfiedCount = Object.values(criteria).filter(Boolean).length;
+
+  // Compute password strength
+  let strength: 'Weak' | 'Medium' | 'Strong' = 'Weak';
+  let strengthColor = 'bg-red-500';
+  let strengthTextColor = 'text-red-500 dark:text-red-400';
+  let barWidth = 'w-1/3';
+
+  if (satisfiedCount >= 5) {
+    strength = 'Strong';
+    strengthColor = 'bg-emerald-500';
+    strengthTextColor = 'text-emerald-500 dark:text-emerald-400';
+    barWidth = 'w-full';
+  } else if (satisfiedCount >= 3) {
+    strength = 'Medium';
+    strengthColor = 'bg-amber-500';
+    strengthTextColor = 'text-amber-500 dark:text-amber-400';
+    barWidth = 'w-2/3';
+  }
+
+  // Strong password generator function
+  const handleSuggestPassword = () => {
+    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+    const numbers = '0123456789';
+    const symbols = '!@#$%^&*()_+-=[]{}|;:,./<>?';
+    
+    // Ensure at least one character from each set is included
+    const mandatoryChars = [
+      uppercase[Math.floor(Math.random() * uppercase.length)],
+      lowercase[Math.floor(Math.random() * lowercase.length)],
+      numbers[Math.floor(Math.random() * numbers.length)],
+      symbols[Math.floor(Math.random() * symbols.length)],
+    ];
+    
+    // Fill the remaining length with a mixed pool of characters
+    const allChars = uppercase + lowercase + numbers + symbols;
+    const remainingLength = 12; // total length 16
+    for (let i = 0; i < remainingLength; i++) {
+      mandatoryChars.push(allChars[Math.floor(Math.random() * allChars.length)]);
+    }
+
+    // Shuffle the characters cryptographically
+    const shuffledPassword = mandatoryChars
+      .sort(() => Math.random() - 0.5)
+      .join('');
+
+    setPassword(shuffledPassword);
+    setConfirmPassword(shuffledPassword);
+    setError(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setSuccess(null);
-    
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
-    const confirmPassword = formData.get('confirmPassword') as string;
 
-    // Client-side validation: Restrict to @abes.ac.in domain
-    if (!email.toLowerCase().endsWith('@abes.ac.in')) {
-      setError('Access restricted: Only email addresses ending with @abes.ac.in are allowed to sign up.');
+    // Final checks before submitting
+    if (satisfiedCount < 5) {
+      setError('Please fulfill all password strength requirements.');
       setLoading(false);
       return;
     }
@@ -33,20 +92,17 @@ export default function SignupPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
-      setLoading(false);
-      return;
-    }
-
+    const formData = new FormData(e.currentTarget);
     const result = await signup(formData);
     setLoading(false);
-    
+
     if (result?.error) {
       setError(result.error);
     } else if (result?.success) {
       setSuccess(result.success);
-      (e.target as HTMLFormElement).reset();
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
     }
   };
 
@@ -111,7 +167,7 @@ export default function SignupPage() {
 
             <div>
               <label htmlFor="email" className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                Official College Email
+                Email Address
               </label>
               <div className="mt-1">
                 <input
@@ -120,28 +176,115 @@ export default function SignupPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  placeholder="yourname@abes.ac.in"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
                   className="appearance-none block w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-800 dark:text-white sm:text-sm transition-colors"
                 />
               </div>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Registration requires an official @abes.ac.in email address.
+                Use your personal or college email address to stay connected.
               </p>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                Password
-              </label>
+              <div className="flex justify-between items-center">
+                <label htmlFor="password" className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSuggestPassword}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 focus:outline-none cursor-pointer"
+                >
+                  Suggest Strong Password
+                </button>
+              </div>
               <div className="mt-1">
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type="text" // Change to text so suggested password can be read, or keep it standard
                   required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="appearance-none block w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-800 dark:text-white sm:text-sm transition-colors"
+                  className="appearance-none block w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-800 dark:text-white sm:text-sm transition-colors font-mono"
                 />
+              </div>
+
+              {/* Password Strength Indicator */}
+              {password.length > 0 && (
+                <div className="mt-3">
+                  <div className="flex justify-between items-center text-xs mb-1.5">
+                    <span className="font-semibold text-slate-650 dark:text-slate-400">Password Strength:</span>
+                    <span className={`font-bold ${strengthTextColor}`}>{strength}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                    <div className={`h-full ${strengthColor} ${barWidth} transition-all duration-300`} />
+                  </div>
+                </div>
+              )}
+
+              {/* Password Checklist */}
+              <div className="mt-4 space-y-2 text-xs text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/80 pt-3">
+                <p className="font-semibold text-slate-700 dark:text-slate-300">Requirements:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {criteria.hasMinLength ? (
+                      <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <span className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-700 shrink-0" />
+                    )}
+                    <span className={criteria.hasMinLength ? 'text-emerald-600 dark:text-emerald-400 font-medium' : ''}>8+ Characters</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {criteria.hasUppercase ? (
+                      <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <span className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-700 shrink-0" />
+                    )}
+                    <span className={criteria.hasUppercase ? 'text-emerald-600 dark:text-emerald-400 font-medium' : ''}>1+ Uppercase</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {criteria.hasLowercase ? (
+                      <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <span className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-700 shrink-0" />
+                    )}
+                    <span className={criteria.hasLowercase ? 'text-emerald-600 dark:text-emerald-400 font-medium' : ''}>1+ Lowercase</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {criteria.hasNumber ? (
+                      <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <span className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-700 shrink-0" />
+                    )}
+                    <span className={criteria.hasNumber ? 'text-emerald-600 dark:text-emerald-400 font-medium' : ''}>1+ Number</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {criteria.hasSpecialChar ? (
+                      <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <span className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-700 shrink-0" />
+                    )}
+                    <span className={criteria.hasSpecialChar ? 'text-emerald-600 dark:text-emerald-400 font-medium' : ''}>1+ Symbol</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -155,8 +298,10 @@ export default function SignupPage() {
                   name="confirmPassword"
                   type="password"
                   required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="appearance-none block w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-800 dark:text-white sm:text-sm transition-colors"
+                  className="appearance-none block w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-800 dark:text-white sm:text-sm transition-colors font-mono"
                 />
               </div>
             </div>

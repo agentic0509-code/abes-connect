@@ -34,17 +34,12 @@ export async function signup(formData: FormData) {
     return { error: 'Email and password are required.' };
   }
 
-  // Server-side validation for email domain
-  if (!email.toLowerCase().endsWith('@abes.ac.in')) {
-    return { error: 'Sign ups are restricted. Only email addresses ending with @abes.ac.in are allowed.' };
-  }
-
   if (password !== confirmPassword) {
     return { error: 'Passwords do not match.' };
   }
 
-  if (password.length < 6) {
-    return { error: 'Password must be at least 6 characters long.' };
+  if (password.length < 8) {
+    return { error: 'Password must be at least 8 characters long.' };
   }
 
   const supabase = await createClient();
