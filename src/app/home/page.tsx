@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { logout } from '@/app/auth/actions';
 import Link from 'next/link';
+import Feed, { Post } from './Feed';
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -8,14 +9,13 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // If there's no user, fall back to showing a nice redirect message or link,
-  // although Next.js middleware handles the redirect to /login automatically.
+  // If there's no user, fall back to showing a redirect card
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6 text-center">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-955 p-6 text-center">
         <div className="p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm border border-slate-200 dark:border-slate-800">
           <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Access Denied</h2>
-          <p className="text-slate-600 dark:text-slate-400 mb-6">You must be logged in to view this page.</p>
+          <p className="text-slate-650 dark:text-slate-400 mb-6">You must be logged in to view this page.</p>
           <Link href="/login" className="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors">
             Go to Login
           </Link>
@@ -24,15 +24,60 @@ export default async function HomePage() {
     );
   }
 
+  // 1. Fetch user's own profile details
+  const { data: currentUserProfile } = await supabase
+    .from('profiles')
+    .select('id, full_name, profile_photo_url, headline')
+    .eq('id', user.id)
+    .single();
+
+  // 2. Fetch the entire community feed with authors, likes, and comments
+  const { data: rawPosts } = await supabase
+    .from('posts')
+    .select(`
+      id,
+      author_id,
+      content,
+      image_url,
+      created_at,
+      author:profiles (
+        id,
+        full_name,
+        profile_photo_url,
+        headline
+      ),
+      likes (
+        post_id,
+        user_id
+      ),
+      comments (
+        id,
+        post_id,
+        author_id,
+        content,
+        created_at,
+        author:profiles (
+          id,
+          full_name,
+          profile_photo_url,
+          headline
+        )
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  // Default to empty array if posts fetch returns null
+  const posts = rawPosts || [];
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 transition-colors duration-300">
-      {/* Background blobs */}
+      {/* Decorative background blobs */}
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full filter blur-[100px] pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full filter blur-[100px] pointer-events-none" />
 
       {/* Navigation Header */}
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-850 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-955/80 backdrop-blur-md border-b border-slate-250 dark:border-slate-850/80 transition-colors">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-sky-400 flex items-center justify-center shadow-md shadow-blue-500/20">
               <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -41,71 +86,79 @@ export default async function HomePage() {
             </div>
             <div>
               <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-sky-500 bg-clip-text text-transparent">ABES</span>
-              <span className="text-xl font-medium tracking-tight text-slate-850 dark:text-slate-205"> Connect</span>
+              <span className="text-xl font-medium tracking-tight text-slate-800 dark:text-slate-200"> Connect</span>
             </div>
           </div>
 
-          <form action={logout}>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-350 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
+          <div className="flex items-center gap-4">
+            <Link 
+              href={currentUserProfile ? `/profile/${currentUserProfile.id}` : '/profile/edit'} 
+              className="text-sm font-semibold text-slate-650 hover:text-blue-600 dark:text-slate-350 dark:hover:text-blue-400 transition-colors"
             >
-              Log out
-            </button>
-          </form>
+              My Profile
+            </Link>
+            <form action={logout}>
+              <button
+                type="submit"
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
+              >
+                Log out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 
-      {/* Main Home Dashboard */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 shadow-xl rounded-3xl p-8 md:p-12 relative overflow-hidden transition-colors">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-blue-500/10 to-transparent rounded-full pointer-events-none" />
-          
-          <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
-            <div className="text-center md:text-left">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900/50 text-green-700 dark:text-green-400 text-xs font-semibold mb-4">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-ping" />
-                Authenticated Session
+      {/* Main Container */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* Left Sidebar - User Mini Profile */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-lg rounded-3xl p-6 transition-colors text-center relative overflow-hidden">
+            <div className="h-16 bg-gradient-to-r from-blue-600 to-sky-400 absolute inset-x-0 top-0 opacity-80" />
+            <div className="relative pt-6">
+              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-md mx-auto">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img 
+                  src={currentUserProfile?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentUserProfile?.full_name || user.email || 'Member')}`} 
+                  alt="Avatar" 
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                Welcome
-              </h1>
-              <p className="mt-2 text-lg text-slate-600 dark:text-slate-400 font-medium">
-                {user.email}
+              <h3 className="font-extrabold text-slate-900 dark:text-white mt-4 text-lg">
+                {currentUserProfile?.full_name || user.email?.split('@')[0]}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                {currentUserProfile?.headline || 'ABES Engineering College Member'}
               </p>
-            </div>
-            
-            <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center shadow-inner">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-          </div>
-
-          <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800/60 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-6 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/30 hover:border-blue-500/20 transition-all">
-              <h3 className="font-bold text-slate-850 dark:text-slate-100 mb-2">My Profile</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Set up your professional networking details to help other ABESians find you.</p>
-              <Link
-                href="/profile/edit"
-                className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors inline-block"
-              >
-                Edit Profile &rarr;
-              </Link>
-            </div>
-
-            <div className="p-6 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/30 hover:border-blue-500/20 transition-all">
-              <h3 className="font-bold text-slate-850 dark:text-slate-100 mb-2">Connections</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Search through the directory of verified alumni and students from your campus.</p>
-              <Link
-                href={`/profile/${user.id}`}
-                className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors inline-block"
-              >
-                View My Profile &rarr;
-              </Link>
+              
+              <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center gap-4">
+                <Link 
+                  href="/profile/edit"
+                  className="px-4 py-2 text-xs font-bold rounded-xl text-blue-650 bg-blue-50 dark:bg-blue-950/40 dark:text-blue-300 hover:bg-blue-100 transition-all"
+                >
+                  Edit Profile &rarr;
+                </Link>
+                <Link 
+                  href={`/profile/${user.id}`}
+                  className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-350 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-350 transition-all"
+                >
+                  View Profile
+                </Link>
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Middle/Main Area - Feed Content */}
+        <div className="lg:col-span-8">
+          <Feed 
+            initialPosts={posts as unknown as Post[]} 
+            currentUser={user} 
+            currentUserProfile={currentUserProfile} 
+          />
+        </div>
+
       </main>
     </div>
   );
