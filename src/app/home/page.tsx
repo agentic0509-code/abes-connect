@@ -83,20 +83,26 @@ export default async function HomePage() {
           </div>
 
           <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800/60 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-6 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/30 hover:border-blue-550/20 transition-all">
+            <div className="p-6 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/30 hover:border-blue-500/20 transition-all">
               <h3 className="font-bold text-slate-850 dark:text-slate-100 mb-2">My Profile</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Set up your professional networking details to help other ABESians find you.</p>
-              <button className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors">
+              <Link
+                href="/profile/edit"
+                className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors inline-block"
+              >
                 Edit Profile &rarr;
-              </button>
+              </Link>
             </div>
 
-            <div className="p-6 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/30 hover:border-blue-550/20 transition-all">
+            <div className="p-6 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/30 hover:border-blue-500/20 transition-all">
               <h3 className="font-bold text-slate-850 dark:text-slate-100 mb-2">Connections</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Search through the directory of verified alumni and students from your campus.</p>
-              <button className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors">
-                Browse Members &rarr;
-              </button>
+              <Link
+                href={`/profile/${user.id}`}
+                className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors inline-block"
+              >
+                View My Profile &rarr;
+              </Link>
             </div>
           </div>
         </div>
