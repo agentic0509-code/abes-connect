@@ -59,6 +59,26 @@ export async function signup(formData: FormData) {
   return { success: 'Registration successful! Please check your email for verification.' };
 }
 
+export async function resetPassword(formData: FormData) {
+  const email = formData.get('email') as string;
+
+  if (!email) {
+    return { error: 'Email address is required.' };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback?next=/reset-password`,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: 'Password reset link sent! Please check your email inbox.' };
+}
+
 export async function logout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
