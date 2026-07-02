@@ -31,6 +31,13 @@ export default async function HomePage() {
     .eq('id', user.id)
     .single();
 
+  // 1.5 Fetch pending requests count
+  const { count: pendingCount } = await supabase
+    .from('connections')
+    .select('*', { count: 'exact', head: true })
+    .eq('receiver_id', user.id)
+    .eq('status', 'pending');
+
   // 2. Fetch the entire community feed with authors, likes, and comments
   const { data: rawPosts } = await supabase
     .from('posts')
@@ -90,10 +97,27 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
+            <Link 
+              href="/directory" 
+              className="text-sm font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors"
+            >
+              Directory
+            </Link>
+            <Link 
+              href="/requests" 
+              className="text-sm font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors relative mr-2"
+            >
+              Requests
+              {pendingCount && pendingCount > 0 ? (
+                <span className="absolute -top-1.5 -right-3.5 w-4 h-4 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center">
+                  {pendingCount}
+                </span>
+              ) : null}
+            </Link>
             <Link 
               href={currentUserProfile ? `/profile/${currentUserProfile.id}` : '/profile/edit'} 
-              className="text-sm font-semibold text-slate-650 hover:text-blue-600 dark:text-slate-350 dark:hover:text-blue-400 transition-colors"
+              className="text-sm font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors"
             >
               My Profile
             </Link>

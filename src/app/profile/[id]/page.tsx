@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
+import ConnectButton from './ConnectButton';
 
 export default async function ProfilePage({
   params,
@@ -22,6 +23,26 @@ export default async function ProfilePage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // 3. Fetch connection status if viewing someone else's profile
+  let connectionStatus: 'none' | 'pending_sent' | 'pending_received' | 'connected' = 'none';
+  if (user && user.id !== profileId) {
+    const { data: conn } = await supabase
+      .from('connections')
+      .select('*')
+      .or(`and(requester_id.eq.${user.id},receiver_id.eq.${profileId}),and(requester_id.eq.${profileId},receiver_id.eq.${user.id})`)
+      .maybeSingle();
+
+    if (conn) {
+      if (conn.status === 'accepted') {
+        connectionStatus = 'connected';
+      } else if (conn.requester_id === user.id) {
+        connectionStatus = 'pending_sent';
+      } else {
+        connectionStatus = 'pending_received';
+      }
+    }
+  }
 
   const isOwner = user?.id === profileId;
 
@@ -124,11 +145,13 @@ export default async function ProfilePage({
                 </div>
               </div>
 
-              {!isOwner && (
+              {!isOwner && user && (
                 <div className="flex items-center gap-3">
-                  <button className="px-5 py-2.5 rounded-xl font-bold bg-blue-600 hover:bg-blue-750 text-white text-sm shadow-md transition-all cursor-pointer">
-                    Connect
-                  </button>
+                  <ConnectButton
+                    profileId={profileId}
+                    currentUserId={user.id}
+                    initialStatus={connectionStatus}
+                  />
                   <button className="px-5 py-2.5 rounded-xl font-bold border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm transition-all cursor-pointer">
                     Message
                   </button>
