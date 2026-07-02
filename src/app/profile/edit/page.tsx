@@ -171,7 +171,12 @@ export default function EditProfilePage() {
 
     } catch (err) {
       console.error('Error saving profile:', err);
-      const errMsg = err instanceof Error ? err.message : 'An error occurred while saving your profile.';
+      let errMsg = 'An error occurred while saving your profile.';
+      if (err && typeof err === 'object' && 'message' in err) {
+        errMsg = String((err as { message?: unknown }).message || '');
+      } else if (err instanceof Error) {
+        errMsg = err.message;
+      }
       setError(errMsg);
     } finally {
       setSaving(false);
