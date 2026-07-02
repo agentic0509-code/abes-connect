@@ -1,6 +1,13 @@
 import Image from "next/image";
+import Link from "next/link";
+import { createClient } from '@/utils/supabase/server';
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 transition-colors duration-300">
       {/* Background Decorative Blobs */}
@@ -31,12 +38,34 @@ export default function Home() {
           </nav>
 
           <div className="flex items-center gap-4">
-            <button className="px-4 py-2 text-sm font-semibold rounded-lg text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-slate-900 transition-all duration-200 cursor-pointer">
-              Log in
-            </button>
-            <button className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 hover:shadow-blue-500/30 dark:bg-blue-500 dark:hover:bg-blue-600 transition-all duration-200 cursor-pointer">
-              Sign up
-            </button>
+            {user ? (
+              <>
+                <span className="text-sm font-medium text-slate-600 dark:text-slate-400 hidden sm:inline">
+                  {user.email}
+                </span>
+                <Link
+                  href="/home"
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 hover:shadow-blue-500/30 dark:bg-blue-500 dark:hover:bg-blue-600 transition-all duration-205 cursor-pointer"
+                >
+                  Dashboard
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="px-4 py-2 text-sm font-semibold rounded-lg text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-slate-900 transition-all duration-200 cursor-pointer"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 hover:shadow-blue-500/30 dark:bg-blue-500 dark:hover:bg-blue-600 transition-all duration-200 cursor-pointer"
+                >
+                  Sign up
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -65,16 +94,33 @@ export default function Home() {
 
             {/* CTA Buttons */}
             <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <button className="px-8 py-4 rounded-xl font-bold bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/35 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
-                Join ABES Connect
-              </button>
-              <button className="px-8 py-4 rounded-xl font-bold border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
-                Welcome Back
-              </button>
+              {user ? (
+                <Link
+                  href="/home"
+                  className="px-8 py-4 rounded-xl text-center font-bold bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/35 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                >
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/signup"
+                    className="px-8 py-4 rounded-xl text-center font-bold bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/35 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                  >
+                    Join ABES Connect
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="px-8 py-4 rounded-xl text-center font-bold border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                  >
+                    Welcome Back
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Quick trust metrics */}
-            <div className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-800/80 grid grid-cols-3 gap-6 max-w-md mx-auto lg:mx-0">
+            <div id="stats" className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-800/80 grid grid-cols-3 gap-6 max-w-md mx-auto lg:mx-0">
               <div>
                 <span className="block text-2xl sm:text-3xl font-extrabold text-blue-600 dark:text-blue-400">10k+</span>
                 <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">Verified Alumni</span>
@@ -128,7 +174,7 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-slate-950 dark:text-white mb-2">Alumni Directory</h3>
+              <h3 className="text-lg font-bold text-slate-955 dark:text-white mb-2">Alumni Directory</h3>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                 Filter and find alumni by graduation year, industry, target companies, or geographic location.
               </p>
@@ -141,7 +187,7 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-slate-950 dark:text-white mb-2">1-on-1 Mentorship</h3>
+              <h3 className="text-lg font-bold text-slate-955 dark:text-white mb-2">1-on-1 Mentorship</h3>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                 Connect directly with seniors for resume reviews, mock interviews, and career roadmaps.
               </p>
@@ -154,7 +200,7 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-slate-950 dark:text-white mb-2">Exclusive Jobs Board</h3>
+              <h3 className="text-lg font-bold text-slate-955 dark:text-white mb-2">Exclusive Jobs Board</h3>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                 Apply for internal job postings and internships recommended or posted directly by alumni.
               </p>
@@ -167,7 +213,7 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-slate-950 dark:text-white mb-2">Project Collaboration</h3>
+              <h3 className="text-lg font-bold text-slate-955 dark:text-white mb-2">Project Collaboration</h3>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                 Build hackathon teams, share open-source college repositories, and co-develop software.
               </p>
@@ -177,7 +223,7 @@ export default function Home() {
       </section>
 
       {/* Testimonials / Success Stories */}
-      <section id="testimonials" className="py-20 bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+      <section id="testimonials" className="py-20 bg-slate-50 dark:bg-slate-955 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto mb-16">
@@ -200,7 +246,7 @@ export default function Home() {
                   AP
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-slate-950 dark:text-white">Aditya Pathak</h4>
+                  <h4 className="text-base font-bold text-slate-955 dark:text-white">Aditya Pathak</h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Batch of 2026 (CSE) • Placed at Microsoft</p>
                 </div>
               </div>
@@ -216,7 +262,7 @@ export default function Home() {
                   NS
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-slate-950 dark:text-white">Neha Sharma</h4>
+                  <h4 className="text-base font-bold text-slate-955 dark:text-white">Neha Sharma</h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Batch of 2021 (IT) • SDE-II at Amazon</p>
                 </div>
               </div>
@@ -226,7 +272,7 @@ export default function Home() {
       </section>
 
       {/* Call To Action Banner */}
-      <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16">
+      <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16 animate-pulse-slow">
         <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-blue-700 to-indigo-800 py-12 px-6 sm:px-12 lg:px-16 text-center shadow-xl shadow-blue-500/10">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.2),transparent_50%)] pointer-events-none" />
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
@@ -236,12 +282,29 @@ export default function Home() {
             Create your profile today, align with industry experts, and join the exclusive professional ecosystem of ABES Engineering College.
           </p>
           <div className="mt-8 flex justify-center gap-4 flex-col sm:flex-row max-w-md mx-auto">
-            <button className="px-6 py-3.5 rounded-xl font-bold bg-white text-blue-700 shadow-md hover:bg-slate-50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
-              Get Started for Free
-            </button>
-            <button className="px-6 py-3.5 rounded-xl font-bold bg-transparent border border-white/60 text-white hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
-              Explore Directory
-            </button>
+            {user ? (
+              <Link
+                href="/home"
+                className="px-6 py-3.5 rounded-xl text-center font-bold bg-white text-blue-700 shadow-md hover:bg-slate-50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+              >
+                Go to Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/signup"
+                  className="px-6 py-3.5 rounded-xl text-center font-bold bg-white text-blue-700 shadow-md hover:bg-slate-50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                >
+                  Get Started for Free
+                </Link>
+                <Link
+                  href="/login"
+                  className="px-6 py-3.5 rounded-xl text-center font-bold bg-transparent border border-white/60 text-white hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                >
+                  Sign In
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </section>
