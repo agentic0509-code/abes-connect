@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
-import { logout } from '@/app/auth/actions';
 import Link from 'next/link';
 import Feed, { Post } from './Feed';
+import Navigation from '@/components/Navigation';
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -31,12 +31,7 @@ export default async function HomePage() {
     .eq('id', user.id)
     .single();
 
-  // 1.5 Fetch pending requests count
-  const { count: pendingCount } = await supabase
-    .from('connections')
-    .select('*', { count: 'exact', head: true })
-    .eq('receiver_id', user.id)
-    .eq('status', 'pending');
+
 
   // 2. Fetch the entire community feed with authors, likes, and comments
   const { data: rawPosts } = await supabase
@@ -82,56 +77,7 @@ export default async function HomePage() {
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full filter blur-[100px] pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full filter blur-[100px] pointer-events-none" />
 
-      {/* Navigation Header */}
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-955/80 backdrop-blur-md border-b border-slate-250 dark:border-slate-850/80 transition-colors">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-sky-400 flex items-center justify-center shadow-md shadow-blue-500/20">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-              </svg>
-            </div>
-            <div>
-              <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-sky-500 bg-clip-text text-transparent">ABES</span>
-              <span className="text-xl font-medium tracking-tight text-slate-800 dark:text-slate-200"> Connect</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <Link 
-              href="/directory" 
-              className="text-sm font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors"
-            >
-              Directory
-            </Link>
-            <Link 
-              href="/requests" 
-              className="text-sm font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors relative mr-2"
-            >
-              Requests
-              {pendingCount && pendingCount > 0 ? (
-                <span className="absolute -top-1.5 -right-3.5 w-4 h-4 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center">
-                  {pendingCount}
-                </span>
-              ) : null}
-            </Link>
-            <Link 
-              href={currentUserProfile ? `/profile/${currentUserProfile.id}` : '/profile/edit'} 
-              className="text-sm font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors"
-            >
-              My Profile
-            </Link>
-            <form action={logout}>
-              <button
-                type="submit"
-                className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
-              >
-                Log out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+      <Navigation />
 
       {/* Main Container */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-8">

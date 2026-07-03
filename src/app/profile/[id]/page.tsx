@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
+import Navigation from '@/components/Navigation';
 import ConnectButton from './ConnectButton';
 
 export default async function ProfilePage({
@@ -66,33 +67,25 @@ export default async function ProfilePage({
   const fallbackAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.full_name)}`;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-955 text-slate-900 dark:text-slate-50 transition-colors duration-300 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
+    <>
+      <Navigation />
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 transition-colors duration-300 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto">
         
-        {/* Navigation / Header */}
-        <div className="flex items-center justify-between mb-6">
-          <Link 
-            href="/home" 
-            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to Dashboard
-          </Link>
-          
+          {/* Edit Profile button for owner */}
           {isOwner && (
-            <Link 
-              href="/profile/edit" 
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl text-white bg-blue-600 hover:bg-blue-750 shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 transition-all cursor-pointer"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-              Edit Profile
-            </Link>
+            <div className="flex justify-end mb-6">
+              <Link 
+                href="/profile/edit" 
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl text-white bg-blue-600 hover:bg-blue-750 shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 transition-all cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Edit Profile
+              </Link>
+            </div>
           )}
-        </div>
 
         {/* Main Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-xl rounded-3xl overflow-hidden transition-colors">
@@ -189,5 +182,6 @@ export default async function ProfilePage({
 
       </div>
     </div>
+    </>
   );
 }

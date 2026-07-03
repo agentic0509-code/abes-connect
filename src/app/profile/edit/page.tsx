@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import Navigation from '@/components/Navigation';
 
 export default function EditProfilePage() {
   const supabase = createClient();
@@ -198,22 +198,15 @@ export default function EditProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 transition-colors duration-300 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        
-        {/* Navigation */}
-        <div className="flex items-center justify-between mb-8">
-          <Link 
-            href={userId ? `/profile/${userId}` : '/home'} 
-            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Cancel & Go Back
-          </Link>
-          <h1 className="text-xl font-bold">Edit Profile</h1>
-        </div>
+    <>
+      <Navigation />
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 transition-colors duration-300 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto">
+          
+          {/* Navigation */}
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-xl font-bold">Edit Profile</h1>
+          </div>
 
         <div className="bg-white dark:bg-slate-900 shadow-xl rounded-3xl border border-slate-200/50 dark:border-slate-800/80 p-8 transition-colors">
           <form onSubmit={handleSubmit} className="space-y-8">
@@ -397,7 +390,8 @@ export default function EditProfilePage() {
           </form>
         </div>
 
+        </div>
       </div>
-    </div>
+    </>
   );
 }

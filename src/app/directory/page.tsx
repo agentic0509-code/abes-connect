@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Navigation from '@/components/Navigation';
 
 interface Profile {
   id: string;
@@ -187,22 +188,15 @@ export default function DirectoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 transition-colors duration-300 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
-        
-        {/* Navigation */}
-        <div className="flex items-center justify-between mb-8">
-          <Link 
-            href="/home" 
-            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to Dashboard
-          </Link>
-          <h1 className="text-xl font-bold">ABES Member Directory</h1>
-        </div>
+    <>
+      <Navigation />
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-955 text-slate-900 dark:text-slate-50 transition-colors duration-300 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          
+          {/* Navigation */}
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-xl font-bold">ABES Member Directory</h1>
+          </div>
 
         {error && (
           <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-sm text-red-650 dark:text-red-400">
@@ -323,7 +317,8 @@ export default function DirectoryPage() {
           </div>
         )}
 
+        </div>
       </div>
-    </div>
+    </>
   );
 }
