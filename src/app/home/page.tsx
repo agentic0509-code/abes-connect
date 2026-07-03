@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
 import Feed, { Post } from './Feed';
 import Navigation from '@/components/Navigation';
+import FloatingChatbox from '@/components/FloatingChatbox';
 
 export const dynamic = 'force-dynamic';
 
@@ -201,6 +202,7 @@ export default async function HomePage() {
         </div>
 
       </main>
+      <FloatingChatbox />
     </div>
   );
 }
