@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 
@@ -11,9 +11,10 @@ interface Profile {
   headline: string | null;
 }
 
-interface Like {
+interface Reaction {
   post_id: string;
   user_id: string;
+  type: 'like' | 'celebrate' | 'support' | 'love' | 'insightful' | 'funny';
 }
 
 interface Comment {
@@ -31,9 +32,17 @@ export interface Post {
   content: string;
   image_url: string | null;
   created_at: string;
+  parent_id: string | null;
   author: Profile | null;
-  likes: Like[];
+  reactions: Reaction[];
   comments: Comment[];
+  parent?: {
+    id: string;
+    content: string;
+    image_url: string | null;
+    created_at: string;
+    author: Profile | null;
+  } | null;
 }
 
 interface FeedProps {
@@ -45,15 +54,21 @@ interface FeedProps {
   currentUserProfile: Profile | null;
 }
 
+const REACTION_TYPES = [
+  { type: 'like', emoji: '👍', label: 'Like', color: 'text-blue-600 dark:text-blue-400' },
+  { type: 'celebrate', emoji: '👏', label: 'Celebrate', color: 'text-orange-500 dark:text-orange-400' },
+  { type: 'support', emoji: '❤️', label: 'Support', color: 'text-indigo-500 dark:text-indigo-400' },
+  { type: 'love', emoji: '💖', label: 'Love', color: 'text-pink-500 dark:text-pink-400' },
+  { type: 'insightful', emoji: '💡', label: 'Insightful', color: 'text-amber-500 dark:text-amber-400' },
+  { type: 'funny', emoji: '😆', label: 'Funny', color: 'text-yellow-500 dark:text-yellow-400' }
+] as const;
+
 function formatTimeAgo(dateString: string): string {
   try {
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    
-    // Fallback for future/skewed clocks
     if (diffMs < 0) return 'Just now';
-    
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
@@ -63,7 +78,6 @@ function formatTimeAgo(dateString: string): string {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays}d ago`;
-    
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   } catch {
     return 'Recently';
@@ -76,25 +90,128 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
 
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   
-  // Post creation state
+  // Post creation states
   const [newPostContent, setNewPostContent] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
 
-  // Comments sections states: tracks which post IDs have expanded comment panels
+  // Comments states
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [newCommentText, setNewCommentText] = useState<Record<string, string>>({});
   const [submittingComment, setSubmittingComment] = useState<Record<string, boolean>>({});
 
+  // Reactions active dropdown tracker
+  const [hoveredPostId, setHoveredPostId] = useState<string | null>(null);
+
+  // Repost states
+  const [repostingPost, setRepostingPost] = useState<Post | null>(null);
+  const [repostComment, setRepostComment] = useState('');
+  const [sharing, setSharing] = useState(false);
+
+  // Mentions autocomplete states
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [postMentionSearch, setPostMentionSearch] = useState<string | null>(null);
+  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
+  const [commentMentionSearch, setCommentMentionSearch] = useState<string | null>(null);
+
   const defaultAvatar = (name: string) => 
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
 
+  // Fetch all profiles on mount to search for mentions
+  useEffect(() => {
+    async function loadProfiles() {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, profile_photo_url, headline');
+      if (data) setProfiles(data);
+    }
+    loadProfiles();
+  }, [supabase]);
+
+  // Parse mentions into clickable Link nodes
+  const parseContentWithMentions = (text: string) => {
+    if (!text) return '';
+    const mentionRegex = /(@\[[^\]]+\]\([^)]+\))/g;
+    const parts = text.split(mentionRegex);
+
+    return parts.map((part, idx) => {
+      const match = part.match(/@\[([^\]]+)\]\(([^)]+)\)/);
+      if (match) {
+        const name = match[1];
+        const id = match[2];
+        return (
+          <Link
+            key={idx}
+            href={`/profile/${id}`}
+            className="text-blue-600 dark:text-blue-400 font-bold hover:underline"
+          >
+            @{name}
+          </Link>
+        );
+      }
+      return part;
+    });
+  };
+
+  // ----------------------------------------------------
+  // Autocomplete Mentions Search handlers
+  // ----------------------------------------------------
+  const handlePostContentChange = (text: string) => {
+    setNewPostContent(text);
+    const lastWord = text.split(/[\s\n]/).pop() || '';
+    if (lastWord.startsWith('@')) {
+      setPostMentionSearch(lastWord.slice(1));
+    } else {
+      setPostMentionSearch(null);
+    }
+  };
+
+  const handleSelectPostMention = (friend: Profile) => {
+    const words = newPostContent.split(/([\s\n])/);
+    // Find the last word starting with @ and replace it
+    for (let i = words.length - 1; i >= 0; i--) {
+      if (words[i].startsWith('@')) {
+        words[i] = `@[${friend.full_name}](${friend.id}) `;
+        break;
+      }
+    }
+    setNewPostContent(words.join(''));
+    setPostMentionSearch(null);
+  };
+
+  const handleCommentTextChange = (postId: string, text: string) => {
+    setNewCommentText({ ...newCommentText, [postId]: text });
+    const lastWord = text.split(/[\s\n]/).pop() || '';
+    if (lastWord.startsWith('@')) {
+      setActiveCommentPostId(postId);
+      setCommentMentionSearch(lastWord.slice(1));
+    } else {
+      setCommentMentionSearch(null);
+    }
+  };
+
+  const handleSelectCommentMention = (postId: string, friend: Profile) => {
+    const text = newCommentText[postId] || '';
+    const words = text.split(/([\s\n])/);
+    for (let i = words.length - 1; i >= 0; i--) {
+      if (words[i].startsWith('@')) {
+        words[i] = `@[${friend.full_name}](${friend.id}) `;
+        break;
+      }
+    }
+    setNewCommentText({ ...newCommentText, [postId]: words.join('') });
+    setCommentMentionSearch(null);
+  };
+
+  // ----------------------------------------------------
+  // Post Posting Logic
+  // ----------------------------------------------------
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
+      if (file.size > 5 * 1024 * 1025) {
         setPostError('Post image must be less than 5MB.');
         return;
       }
@@ -110,7 +227,7 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleCreatePost = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPostContent.trim() && !selectedFile) return;
 
@@ -118,13 +235,12 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
     setPostError(null);
 
     try {
-      let imageUrl: string | null = null;
-      const tempPostId = crypto.randomUUID(); // Premature UUID for file nesting path
+      let imageUrl = null;
 
-      // 1. Upload post image if selected
+      // 1. Upload image to post-images bucket
       if (selectedFile) {
         const fileExt = selectedFile.name.split('.').pop();
-        const filePath = `${currentUser.id}/${tempPostId}.${fileExt}`;
+        const filePath = `${currentUser.id}/${crypto.randomUUID()}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('post-images')
@@ -145,9 +261,8 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
       const { data: newPostRow, error: insertError } = await supabase
         .from('posts')
         .insert({
-          id: tempPostId,
           author_id: currentUser.id,
-          content: newPostContent,
+          content: newPostContent.trim(),
           image_url: imageUrl,
         })
         .select()
@@ -155,7 +270,7 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
 
       if (insertError) throw insertError;
 
-      // 3. Assemble the new post local state object
+      // 3. Assemble full local Post state
       const assembledPost: Post = {
         ...newPostRow,
         author: currentUserProfile || {
@@ -164,7 +279,7 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
           profile_photo_url: null,
           headline: 'Member',
         },
-        likes: [],
+        reactions: [],
         comments: [],
       };
 
@@ -187,13 +302,8 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
     if (!confirm('Are you sure you want to delete this post?')) return;
 
     try {
-      const { error } = await supabase
-        .from('posts')
-        .delete()
-        .eq('id', postId);
-
+      const { error } = await supabase.from('posts').delete().eq('id', postId);
       if (error) throw error;
-
       setPosts(posts.filter((p) => p.id !== postId));
     } catch (err) {
       console.error('Error deleting post:', err);
@@ -201,69 +311,128 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
     }
   };
 
-  const handleToggleLike = async (postId: string) => {
+  // ----------------------------------------------------
+  // Reactions Upsert & Delete Logic
+  // ----------------------------------------------------
+  const handleToggleReaction = async (postId: string, reactionType: typeof REACTION_TYPES[number]['type']) => {
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
 
-    const hasLiked = post.likes.some((l) => l.user_id === currentUser.id);
+    const existingReaction = post.reactions.find((r) => r.user_id === currentUser.id);
 
     try {
-      if (hasLiked) {
-        // Unlike post
+      if (existingReaction && existingReaction.type === reactionType) {
+        // Remove reaction
         const { error } = await supabase
-          .from('likes')
+          .from('reactions')
           .delete()
           .eq('post_id', postId)
           .eq('user_id', currentUser.id);
 
         if (error) throw error;
 
-        // Update state
         setPosts(
           posts.map((p) =>
             p.id === postId
-              ? { ...p, likes: p.likes.filter((l) => l.user_id !== currentUser.id) }
+              ? { ...p, reactions: p.reactions.filter((r) => r.user_id !== currentUser.id) }
               : p
           )
         );
       } else {
-        // Like post
+        // Upsert reaction
         const { error } = await supabase
-          .from('likes')
-          .insert({
+          .from('reactions')
+          .upsert({
             post_id: postId,
             user_id: currentUser.id,
+            type: reactionType,
           });
 
         if (error) throw error;
 
-        // Update state
+        const updatedReactions = existingReaction
+          ? post.reactions.map((r) => (r.user_id === currentUser.id ? { ...r, type: reactionType } : r))
+          : [...post.reactions, { post_id: postId, user_id: currentUser.id, type: reactionType }];
+
         setPosts(
           posts.map((p) =>
-            p.id === postId
-              ? { ...p, likes: [...p.likes, { post_id: postId, user_id: currentUser.id }] }
-              : p
+            p.id === postId ? { ...p, reactions: updatedReactions } : p
           )
         );
       }
     } catch (err) {
-      console.error('Error toggling like:', err);
+      console.error('Error toggling reaction:', err);
+    } finally {
+      setHoveredPostId(null);
     }
   };
 
-  const toggleCommentsExpansion = (postId: string) => {
-    setExpandedComments((prev) => ({
-      ...prev,
-      [postId]: !prev[postId],
-    }));
+  // ----------------------------------------------------
+  // Repost / Sharing Logic
+  // ----------------------------------------------------
+  const handleCreateRepost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!repostingPost) return;
+
+    setSharing(true);
+    try {
+      const { data: newPostRow, error: insertError } = await supabase
+        .from('posts')
+        .insert({
+          author_id: currentUser.id,
+          content: repostComment.trim(),
+          parent_id: repostingPost.id,
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      const assembledPost: Post = {
+        ...newPostRow,
+        author: currentUserProfile || {
+          id: currentUser.id,
+          full_name: currentUser.email?.split('@')[0] || 'Member',
+          profile_photo_url: null,
+          headline: 'Member',
+        },
+        reactions: [],
+        comments: [],
+        parent: {
+          id: repostingPost.id,
+          content: repostingPost.content,
+          image_url: repostingPost.image_url,
+          created_at: repostingPost.created_at,
+          author: repostingPost.author,
+        },
+      };
+
+      setPosts([assembledPost, ...posts]);
+      setRepostingPost(null);
+      setRepostComment('');
+    } catch (err) {
+      console.error('Error reposting:', err);
+      alert('Failed to share repost.');
+    } finally {
+      setSharing(false);
+    }
   };
 
-  const handleAddComment = async (e: React.FormEvent, postId: string) => {
-    e.preventDefault();
-    const commentText = newCommentText[postId] || '';
-    if (!commentText.trim()) return;
+  // ----------------------------------------------------
+  // Comments Handlers
+  // ----------------------------------------------------
+  const toggleComments = (postId: string) => {
+    setExpandedComments({
+      ...expandedComments,
+      [postId]: !expandedComments[postId],
+    });
+  };
 
-    setSubmittingComment((prev) => ({ ...prev, [postId]: true }));
+  const handlePostComment = async (postId: string) => {
+    const commentText = newCommentText[postId]?.trim();
+    if (!commentText) return;
+
+    setSubmittingComment({ ...submittingComment, [postId]: true });
 
     try {
       const { data: newCommentRow, error } = await supabase
@@ -278,7 +447,6 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
 
       if (error) throw error;
 
-      // Assemble comment local object
       const assembledComment: Comment = {
         ...newCommentRow,
         author: currentUserProfile || {
@@ -290,20 +458,24 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
       };
 
       setPosts(
-        posts.map((p) =>
-          p.id === postId
-            ? { ...p, comments: [...p.comments, assembledComment] }
-            : p
-        )
+        posts.map((post) => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              comments: [...post.comments, assembledComment],
+            };
+          }
+          return post;
+        })
       );
 
-      // Clear input
-      setNewCommentText((prev) => ({ ...prev, [postId]: '' }));
+      setNewCommentText({ ...newCommentText, [postId]: '' });
+
     } catch (err) {
       console.error('Error adding comment:', err);
       alert('Failed to add comment.');
     } finally {
-      setSubmittingComment((prev) => ({ ...prev, [postId]: false }));
+      setSubmittingComment({ ...submittingComment, [postId]: false });
     }
   };
 
@@ -311,19 +483,19 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
     if (!confirm('Are you sure you want to delete this comment?')) return;
 
     try {
-      const { error } = await supabase
-        .from('comments')
-        .delete()
-        .eq('id', commentId);
-
+      const { error } = await supabase.from('comments').delete().eq('id', commentId);
       if (error) throw error;
 
       setPosts(
-        posts.map((p) =>
-          p.id === postId
-            ? { ...p, comments: p.comments.filter((c) => c.id !== commentId) }
-            : p
-        )
+        posts.map((post) => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              comments: post.comments.filter((c) => c.id !== commentId),
+            };
+          }
+          return post;
+        })
       );
     } catch (err) {
       console.error('Error deleting comment:', err);
@@ -331,42 +503,113 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
     }
   };
 
+  // Helper: Reaction Summary counts rendering
+  const renderReactionSummary = (postReactions: Reaction[]) => {
+    if (postReactions.length === 0) return null;
+
+    // Count by type
+    const counts = postReactions.reduce((acc, r) => {
+      acc[r.type] = (acc[r.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Sort by count descending
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const topReactionTypes = sorted.slice(0, 3).map((s) => s[0]);
+
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+        <div className="flex -space-x-1">
+          {topReactionTypes.map((type) => {
+            const match = REACTION_TYPES.find((r) => r.type === type);
+            return (
+              <span key={type} className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-white dark:border-slate-900 text-xs shadow-sm">
+                {match?.emoji}
+              </span>
+            );
+          })}
+        </div>
+        <span className="font-medium">
+          {postReactions.length} {postReactions.length === 1 ? 'reaction' : 'reactions'}
+        </span>
+      </div>
+    );
+  };
+
+  // Autocomplete suggestions search
+  const postDropdownSuggestions = postMentionSearch !== null
+    ? profiles.filter((p) => p.full_name.toLowerCase().includes(postMentionSearch.toLowerCase())).slice(0, 5)
+    : [];
+
+  const commentDropdownSuggestions = commentMentionSearch !== null
+    ? profiles.filter((p) => p.full_name.toLowerCase().includes(commentMentionSearch.toLowerCase())).slice(0, 5)
+    : [];
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       
-      {/* Create Post Box */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-lg rounded-3xl p-6 transition-colors">
+      {/* A. Publishing Form Box */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-md rounded-3xl p-6 transition-colors">
         <form onSubmit={handleCreatePost} className="space-y-4">
-          <div className="flex gap-4">
+          <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img 
                 src={currentUserProfile?.profile_photo_url || defaultAvatar(currentUserProfile?.full_name || currentUser.email || 'Member')} 
-                alt="My Profile Picture" 
+                alt="Avatar" 
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="flex-1">
+            
+            <div className="flex-1 relative">
               <textarea
-                rows={3}
                 value={newPostContent}
-                onChange={(e) => setNewPostContent(e.target.value)}
-                placeholder="Share an update, ask a question, or highlight an achievement..."
-                className="w-full text-sm border-0 focus:ring-0 focus:outline-none resize-none dark:bg-slate-900 placeholder-slate-450 dark:placeholder-slate-500 text-slate-900 dark:text-slate-100"
+                onChange={(e) => handlePostContentChange(e.target.value)}
+                placeholder="What is on your mind? Share a story, project milestone, or referral..."
+                rows={3}
+                className="w-full resize-none bg-transparent placeholder-slate-400 focus:outline-none text-sm text-slate-800 dark:text-slate-200 py-1.5"
               />
+
+              {/* @Mentions dropdown autocomplete suggestions */}
+              {postDropdownSuggestions.length > 0 && (
+                <div className="absolute left-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl w-60 z-40 overflow-hidden">
+                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 border-b border-slate-100 dark:border-slate-800">MENTION PEOPLE</div>
+                  {postDropdownSuggestions.map((friend) => (
+                    <button
+                      key={friend.id}
+                      type="button"
+                      onClick={() => handleSelectPostMention(friend)}
+                      className="w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <div className="w-6 h-6 rounded-full overflow-hidden shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={friend.profile_photo_url || defaultAvatar(friend.full_name)} alt="Avatar" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{friend.full_name}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
             </div>
           </div>
 
-          {/* Post Image Preview */}
+          {/* Optional Image Attachment Preview */}
           {imagePreview && (
-            <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40">
+            <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imagePreview} alt="Upload Preview" className="max-h-72 w-full object-contain" />
+              <img 
+                src={imagePreview} 
+                alt="Upload Preview" 
+                className="max-h-80 w-full object-contain mx-auto"
+              />
               <button
                 type="button"
                 onClick={clearSelectedImage}
-                className="absolute top-3 right-3 p-2 bg-slate-900/70 hover:bg-slate-900 text-white rounded-full transition-colors cursor-pointer"
-                title="Remove Photo"
+                className="absolute top-3 right-3 p-1.5 rounded-full bg-slate-900/60 text-white hover:bg-slate-900 transition-colors cursor-pointer"
+                title="Remove image"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -376,33 +619,31 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
           )}
 
           {postError && (
-            <p className="text-xs font-semibold text-red-500">{postError}</p>
+            <div className="p-3 text-xs text-red-650 bg-red-50 dark:bg-red-950/20 dark:text-red-400 rounded-xl border border-red-100 dark:border-red-900/30">
+              {postError}
+            </div>
           )}
 
-          {/* Form Actions */}
-          <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-4">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImageChange}
-              accept="image/*"
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl text-slate-700 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
-            >
-              <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          {/* Form Actions Footer */}
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80">
+            <label className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 hover:text-blue-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-blue-400 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors">
+              <input 
+                type="file" 
+                ref={fileInputRef}
+                accept="image/*" 
+                className="hidden" 
+                onChange={handleImageChange}
+              />
+              <svg className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              Add Photo
-            </button>
+              Photo
+            </label>
 
             <button
               type="submit"
               disabled={publishing || (!newPostContent.trim() && !selectedFile)}
-              className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-700 hover:to-sky-600 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer shadow-md shadow-blue-500/10"
+              className="px-6 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-sm transition-colors cursor-pointer"
             >
               {publishing ? 'Publishing...' : 'Publish'}
             </button>
@@ -410,30 +651,35 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
         </form>
       </div>
 
-      {/* Posts List Feed */}
-      <div className="space-y-6">
+      {/* B. Community Feed List */}
+      <div className="space-y-4">
         {posts.length === 0 ? (
           <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-md rounded-3xl p-12 text-center transition-colors">
             <svg className="w-16 h-16 text-slate-300 dark:text-slate-700 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 4a2 2 0 012 2v5a3 3 0 01-3 3h-1m-4-6h.01M9 10h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01" />
             </svg>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">No Posts Yet</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-              Be the first to publish a post and start the conversation in the ABES Connect community!
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">No posts yet</h3>
+            <p className="text-sm text-slate-550 dark:text-slate-450 mt-1 max-w-sm mx-auto">
+              No posts yet — be the first to share something with your connections!
             </p>
           </div>
         ) : (
           posts.map((post) => {
-            const hasLiked = post.likes.some((l) => l.user_id === currentUser.id);
+            const myReaction = post.reactions.find((r) => r.user_id === currentUser.id);
             const isAuthor = post.author_id === currentUser.id;
             const commentsExpanded = expandedComments[post.id] || false;
             const commentValue = newCommentText[post.id] || '';
             const commentLoading = submittingComment[post.id] || false;
 
+            // Highlight active reaction
+            const activeReactionMatch = myReaction
+              ? REACTION_TYPES.find((r) => r.type === myReaction.type)
+              : null;
+
             return (
               <div 
                 key={post.id} 
-                className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-lg rounded-3xl p-6 transition-colors space-y-4"
+                className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-md rounded-3xl p-6 transition-colors space-y-4 relative"
               >
                 {/* Author Info Header */}
                 <div className="flex items-center justify-between">
@@ -447,21 +693,29 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
                       />
                     </Link>
                     <div>
-                      <Link href={`/profile/${post.author_id}`} className="text-sm font-bold text-slate-950 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                        {post.author?.full_name}
-                      </Link>
-                      <p className="text-xs text-slate-550 dark:text-slate-450 line-clamp-1">{post.author?.headline || 'ABES Engineering College Member'}</p>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">{formatTimeAgo(post.created_at)}</p>
+                      <div className="flex items-center gap-1.5">
+                        <Link 
+                          href={`/profile/${post.author_id}`}
+                          className="text-sm font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          {post.author?.full_name}
+                        </Link>
+                        {post.parent_id && (
+                          <span className="text-xs text-slate-400 font-medium">shared a post</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-450 mt-0.5 line-clamp-1">{post.author?.headline || 'ABES Member'}</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5">{formatTimeAgo(post.created_at)}</p>
                     </div>
                   </div>
 
                   {isAuthor && (
                     <button
                       onClick={() => handleDeletePost(post.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all cursor-pointer"
-                      title="Delete Post"
+                      className="p-1.5 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-650 dark:hover:bg-red-950/20 dark:hover:text-red-400 transition-all cursor-pointer"
+                      title="Delete post"
                     >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
@@ -469,124 +723,221 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
                 </div>
 
                 {/* Post Content */}
-                <div className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
-                  {post.content}
+                <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed">
+                  {parseContentWithMentions(post.content)}
                 </div>
 
-                {/* Post Image */}
+                {/* Render Post image attachment */}
                 {post.image_url && (
-                  <div className="rounded-2xl overflow-hidden border border-slate-200/50 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-950/30">
+                  <div className="rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-850 bg-slate-50 dark:bg-slate-950/20 max-h-96 flex items-center justify-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img 
                       src={post.image_url} 
                       alt="Post attachment" 
-                      className="max-h-96 w-full object-cover"
+                      className="max-h-96 w-full object-contain"
                     />
                   </div>
                 )}
 
-                {/* Action Metrics Row */}
-                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => handleToggleLike(post.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer font-bold ${
-                        hasLiked ? 'text-blue-650 dark:text-blue-400' : ''
-                      }`}
-                    >
-                      {hasLiked ? (
-                        <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 fill-current" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a2 2 0 00-.8 1.6v.8z" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-                        </svg>
-                      )}
-                      <span>{post.likes.length} Likes</span>
-                    </button>
+                {/* Repost Shared Nested Card */}
+                {post.parent && (
+                  <div className="border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl p-4 mt-2 space-y-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={post.parent.author?.profile_photo_url || defaultAvatar(post.parent.author?.full_name || 'Member')} 
+                          alt="Avatar" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{post.parent.author?.full_name}</p>
+                        <p className="text-[9px] text-slate-400">{formatTimeAgo(post.parent.created_at)}</p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                      {parseContentWithMentions(post.parent.content)}
+                    </p>
+
+                    {post.parent.image_url && (
+                      <div className="rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800 max-h-60 flex items-center justify-center bg-white dark:bg-black/10">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={post.parent.image_url} 
+                          alt="Attachment" 
+                          className="max-h-60 w-full object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Post Footer Counts Panel */}
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3 mt-4 text-[11px] text-slate-400">
+                  <div>
+                    {renderReactionSummary(post.reactions)}
+                  </div>
+                  <button 
+                    onClick={() => toggleComments(post.id)}
+                    className="hover:text-blue-600 dark:hover:text-blue-400 font-semibold cursor-pointer"
+                  >
+                    {post.comments.length} {post.comments.length === 1 ? 'comment' : 'comments'}
+                  </button>
+                </div>
+
+                {/* Posts Actions Button Bar */}
+                <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400 relative">
+                  
+                  {/* Reaction Button with Popover triggers */}
+                  <div 
+                    className="relative flex-1 flex justify-center py-2 hover:bg-slate-50 dark:hover:bg-slate-800/60 rounded-xl transition-all cursor-pointer"
+                    onMouseEnter={() => setHoveredPostId(post.id)}
+                    onMouseLeave={() => setHoveredPostId(null)}
+                  >
+                    {/* Hover reactions selector popover bar */}
+                    {hoveredPostId === post.id && (
+                      <div className="absolute bottom-full left-0 mb-1 flex items-center gap-2 p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-30 animate-fade-in">
+                        {REACTION_TYPES.map((react) => (
+                          <button
+                            key={react.type}
+                            type="button"
+                            onClick={() => handleToggleReaction(post.id, react.type)}
+                            className="text-lg hover:scale-130 transition-transform p-1 cursor-pointer"
+                            title={react.label}
+                          >
+                            {react.emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     <button
-                      onClick={() => toggleCommentsExpansion(post.id)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer font-bold"
+                      onClick={() => handleToggleReaction(post.id, 'like')}
+                      className={`flex items-center gap-1.5 cursor-pointer ${
+                        activeReactionMatch ? activeReactionMatch.color : 'text-slate-600 dark:text-slate-400'
+                      }`}
                     >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                      </svg>
-                      <span>{post.comments.length} Comments</span>
+                      <span>{activeReactionMatch ? activeReactionMatch.emoji : '👍'}</span>
+                      <span>{activeReactionMatch ? activeReactionMatch.label : 'React'}</span>
                     </button>
                   </div>
+
+                  {/* Comment Button */}
+                  <button 
+                    onClick={() => toggleComments(post.id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/60 rounded-xl transition-all cursor-pointer"
+                  >
+                    <svg className="w-4.5 h-4.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    Comment
+                  </button>
+
+                  {/* Repost Button */}
+                  <button 
+                    onClick={() => setRepostingPost(post)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/60 rounded-xl transition-all cursor-pointer"
+                  >
+                    <svg className="w-4.5 h-4.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 10.742l3.26-1.63M12.443 14.382l-3.26-1.63M16.06 8.39c.645-.215 1.155-.724 1.37-1.37a2.122 2.122 0 00-.51-2.12c-.54-.54-1.376-.69-2.072-.375a2.125 2.125 0 00-1.272 1.954V8.39zM8.39 12a2.125 2.125 0 11-4.25 0 2.125 2.125 0 014.25 0zm11.86 3.61c.645-.215 1.155-.724 1.37-1.37a2.122 2.122 0 00-.51-2.12c-.54-.54-1.376-.69-2.072-.375a2.125 2.125 0 00-1.272 1.954v1.911z" />
+                    </svg>
+                    Repost
+                  </button>
                 </div>
 
                 {/* Expanded Comments Panel */}
                 {commentsExpanded && (
-                  <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 space-y-4">
+                  <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800/80 animate-fade-in">
                     
-                    {/* Add Comment Input Form */}
-                    <form onSubmit={(e) => handleAddComment(e, post.id)} className="flex gap-3">
+                    {/* Add Comment Form */}
+                    <div className="flex gap-2 items-start relative">
                       <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img 
                           src={currentUserProfile?.profile_photo_url || defaultAvatar(currentUserProfile?.full_name || currentUser.email || 'Member')} 
-                          alt="My Profile Picture" 
+                          alt="Avatar" 
                           className="w-full h-full object-cover"
                         />
                       </div>
-                      <div className="flex-1 flex gap-2">
+                      <div className="flex-1 relative">
                         <input
                           type="text"
                           value={commentValue}
-                          onChange={(e) => setNewCommentText((prev) => ({ ...prev, [post.id]: e.target.value }))}
-                          placeholder="Write a comment..."
-                          className="flex-1 px-3 py-1.5 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-800 dark:text-white text-xs transition-colors"
+                          onChange={(e) => handleCommentTextChange(post.id, e.target.value)}
+                          placeholder="Write a comment... (Type @ to mention someone)"
+                          className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-slate-800 dark:text-white"
                         />
-                        <button
-                          type="submit"
-                          disabled={commentLoading || !commentValue.trim()}
-                          className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-650 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                        >
-                          Send
-                        </button>
-                      </div>
-                    </form>
 
-                    {/* Comments List */}
+                        {/* Comment mention autocomplete */}
+                        {activeCommentPostId === post.id && commentDropdownSuggestions.length > 0 && (
+                          <div className="absolute left-0 bottom-full mb-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl w-60 z-40 overflow-hidden">
+                            <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 border-b border-slate-100 dark:border-slate-800">MENTION PEOPLE</div>
+                            {commentDropdownSuggestions.map((friend) => (
+                              <button
+                                key={friend.id}
+                                type="button"
+                                onClick={() => handleSelectCommentMention(post.id, friend)}
+                                className="w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                              >
+                                <div className="w-6 h-6 rounded-full overflow-hidden shrink-0">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={friend.profile_photo_url || defaultAvatar(friend.full_name)} alt="Avatar" className="w-full h-full object-cover" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{friend.full_name}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                      </div>
+                      <button
+                        onClick={() => handlePostComment(post.id)}
+                        disabled={commentLoading || !commentValue.trim()}
+                        className="px-4 py-2 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:opacity-50 shrink-0 cursor-pointer"
+                      >
+                        {commentLoading ? 'Posting...' : 'Post'}
+                      </button>
+                    </div>
+
+                    {/* Comments list */}
                     {post.comments.length > 0 && (
-                      <div className="space-y-3 pt-2">
+                      <div className="space-y-3 pl-10">
                         {post.comments.map((comment) => {
-                          const isCommentOwner = comment.author_id === currentUser.id;
+                          const isCommentAuthor = comment.author_id === currentUser.id;
                           return (
-                            <div key={comment.id} className="flex gap-3 bg-slate-50/50 dark:bg-slate-950/20 p-3 rounded-2xl border border-slate-100/50 dark:border-slate-900/50">
-                              <Link href={`/profile/${comment.author_id}`} className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800 hover:opacity-85 transition-opacity">
+                            <div key={comment.id} className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-2xl relative flex items-start gap-2.5">
+                              <div className="w-6 h-6 rounded-md overflow-hidden shrink-0 border border-slate-200">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img 
                                   src={comment.author?.profile_photo_url || defaultAvatar(comment.author?.full_name || 'Member')} 
-                                  alt={comment.author?.full_name || 'Member'} 
+                                  alt="Avatar" 
                                   className="w-full h-full object-cover"
                                 />
-                              </Link>
-                              <div className="flex-1">
+                              </div>
+                              <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between">
-                                  <div>
-                                    <Link href={`/profile/${comment.author_id}`} className="text-xs font-bold text-slate-950 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                                      {comment.author?.full_name}
-                                    </Link>
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-2 font-medium">{formatTimeAgo(comment.created_at)}</span>
-                                  </div>
-
-                                  {isCommentOwner && (
+                                  <span className="text-[10px] font-bold text-slate-900 dark:text-white">
+                                    {comment.author?.full_name}
+                                  </span>
+                                  {isCommentAuthor && (
                                     <button
                                       onClick={() => handleDeleteComment(post.id, comment.id)}
-                                      className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all cursor-pointer"
-                                      title="Delete Comment"
+                                      className="text-slate-400 hover:text-red-650 p-0.5 rounded cursor-pointer"
+                                      title="Delete comment"
                                     >
-                                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                       </svg>
                                     </button>
                                   )}
                                 </div>
-                                <p className="text-xs text-slate-700 dark:text-slate-300 mt-1">{comment.content}</p>
+                                <p className="text-xs text-slate-700 dark:text-slate-350 mt-1 whitespace-pre-line">
+                                  {parseContentWithMentions(comment.content)}
+                                </p>
                               </div>
                             </div>
                           );
@@ -602,6 +953,55 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
           })
         )}
       </div>
+
+      {/* C. Repost commentary sharing Modal */}
+      {repostingPost && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-200/50 dark:border-slate-800/80 transition-colors">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Repost this post</h3>
+              <button onClick={() => setRepostingPost(null)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
+                <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateRepost} className="space-y-4">
+              <textarea
+                value={repostComment}
+                onChange={(e) => setRepostComment(e.target.value)}
+                placeholder="Add your thoughts or commentary (optional)..."
+                rows={3}
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 p-3 text-sm focus:outline-none dark:bg-slate-850 dark:text-white"
+              />
+
+              {/* Nested preview inside dialog */}
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 bg-slate-50 dark:bg-slate-950/20 max-h-48 overflow-y-auto">
+                <p className="text-xs font-bold text-slate-900 dark:text-white">{repostingPost.author?.full_name}</p>
+                <p className="text-xs text-slate-655 dark:text-slate-400 mt-1 line-clamp-2">{repostingPost.content}</p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRepostingPost(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-105 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sharing}
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                >
+                  {sharing ? 'Sharing...' : 'Repost Now'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

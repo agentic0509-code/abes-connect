@@ -33,8 +33,20 @@ export default async function HomePage() {
 
 
 
-  // 2. Fetch the entire community feed with authors, likes, and comments
-  const { data: rawPosts } = await supabase
+  // 1.5 Fetch accepted connections to construct feed audience
+  const { data: connections } = await supabase
+    .from('connections')
+    .select('requester_id, receiver_id')
+    .eq('status', 'accepted');
+
+  const friendIds = connections?.map((c) =>
+    c.requester_id === user.id ? c.receiver_id : c.requester_id
+  ) || [];
+
+  const feedUserIds = [user.id, ...friendIds];
+
+  // 2. Fetch connection-filtered community feed with author profile, reactions, comments, and nested parent reposts
+  const { data: rawPosts, error: postsError } = await supabase
     .from('posts')
     .select(`
       id,
@@ -42,15 +54,29 @@ export default async function HomePage() {
       content,
       image_url,
       created_at,
+      parent_id,
       author:profiles (
         id,
         full_name,
         profile_photo_url,
         headline
       ),
-      likes (
+      reactions (
         post_id,
-        user_id
+        user_id,
+        type
+      ),
+      parent:posts (
+        id,
+        content,
+        image_url,
+        created_at,
+        author:profiles (
+          id,
+          full_name,
+          profile_photo_url,
+          headline
+        )
       ),
       comments (
         id,
@@ -66,7 +92,12 @@ export default async function HomePage() {
         )
       )
     `)
+    .in('author_id', feedUserIds)
     .order('created_at', { ascending: false });
+
+  if (postsError) {
+    console.error('Error fetching posts feed:', postsError);
+  }
 
   // Default to empty array if posts fetch returns null
   const posts = rawPosts || [];
