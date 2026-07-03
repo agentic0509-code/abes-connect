@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { signup } from '@/app/auth/actions';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function SignupPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -99,10 +101,7 @@ export default function SignupPage() {
     if (result?.error) {
       setError(result.error);
     } else if (result?.success) {
-      setSuccess(result.success);
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
+      router.push('/login?signup_success=1');
     }
   };
 
