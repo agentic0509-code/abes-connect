@@ -72,82 +72,140 @@ export default function Navigation() {
   };
 
   const navLinks = [
-    { name: 'Home', href: '/home' },
-    { name: 'Directory', href: '/directory' },
+    { 
+      name: 'Home', 
+      href: '/home',
+      icon: (
+        <svg className="w-5.5 h-5.5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+        </svg>
+      )
+    },
+    { 
+      name: 'Classmates', 
+      href: '/directory',
+      icon: (
+        <svg className="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+      )
+    },
     { 
       name: 'Requests', 
       href: '/requests', 
-      badge: pendingCount > 0 ? pendingCount : undefined 
+      badge: pendingCount > 0 ? pendingCount : undefined,
+      icon: (
+        <svg className="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+        </svg>
+      )
     },
-    { name: 'My Profile', href: currentUserId ? `/profile/${currentUserId}` : '/profile/edit' }
+    { 
+      name: 'Messaging', 
+      href: '/messages',
+      icon: (
+        <svg className="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      )
+    }
   ];
 
   return (
-    <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-850/80 transition-colors">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-50 bg-white dark:bg-[#1d2226] border-b border-[#dfdfdf] dark:border-slate-805 transition-colors">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
         
-        {/* Logo and Brand */}
-        <Link href="/home" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-sky-400 flex items-center justify-center shadow-md shadow-blue-500/20">
-            <svg className="w-5.5 h-5.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-            </svg>
+        {/* Left Side: Logo & Search Bar */}
+        <div className="flex items-center gap-2 flex-1 max-w-sm">
+          <Link href="/home" className="flex items-center gap-1.5 hover:opacity-90 transition-opacity">
+            <div className="w-8 h-8 rounded bg-[#0a66c2] flex items-center justify-center font-bold text-white text-base shadow-sm">
+              ac
+            </div>
+            <span className="text-sm font-extrabold text-[#0a66c2] tracking-tight hidden lg:inline">ABES Connect</span>
+          </Link>
+          
+          <div className="relative w-full hidden sm:block max-w-xs">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+              <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Search classmates..."
+              className="w-full bg-[#eef3f8] dark:bg-slate-800 text-xs border-none focus:outline-none focus:ring-1 focus:ring-[#0a66c2] rounded pl-9 pr-3 py-1.5 text-slate-800 dark:text-slate-200 placeholder-slate-500"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  router.push(`/directory?search=${encodeURIComponent((e.target as HTMLInputElement).value)}`);
+                }
+              }}
+            />
           </div>
-          <div>
-            <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-600 to-sky-500 bg-clip-text text-transparent">ABES</span>
-            <span className="text-lg font-medium tracking-tight text-slate-800 dark:text-slate-200"> Connect</span>
-          </div>
-        </Link>
+        </div>
 
-        {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-6">
+        {/* Right Side: Desktop Navigation Links */}
+        <nav className="hidden md:flex items-center gap-1.5 h-full">
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
             return (
               <Link
                 key={link.name}
                 href={link.href}
-                className={`text-sm font-semibold relative transition-colors ${
+                className={`h-14 flex flex-col items-center justify-center min-w-16 px-1 text-center transition-colors relative border-b-2 ${
                   isActive 
-                    ? 'text-blue-600 dark:text-blue-400' 
-                    : 'text-slate-600 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400'
+                    ? 'text-slate-900 border-slate-900 dark:text-white dark:border-white' 
+                    : 'text-slate-500 border-transparent hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                 }`}
               >
-                {link.name}
-                {link.badge && (
-                  <span className="ml-1.5 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[9px] font-bold">
-                    {link.badge}
-                  </span>
-                )}
-                {isActive && (
-                  <span className="absolute -bottom-[21px] left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full" />
-                )}
+                <div className="relative">
+                  {link.icon}
+                  {link.badge && (
+                    <span className="absolute -top-1.5 -right-2 px-1 py-0.5 bg-red-500 text-white rounded-full text-[8px] font-black leading-none">
+                      {link.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] font-semibold mt-1 tracking-tight">{link.name}</span>
               </Link>
             );
           })}
 
-          {/* User Mini Avatar / Edit Profile Link */}
+          {/* "Me" Avatar & Profile dropdown */}
           {currentUserId && (
-            <Link 
-              href="/profile/edit"
-              className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800 hover:opacity-85 transition-opacity"
-              title="Edit Profile"
+            <Link
+              href={`/profile/${currentUserId}`}
+              className={`h-14 flex flex-col items-center justify-center min-w-16 px-1 text-center transition-colors relative border-b-2 ${
+                pathname === `/profile/${currentUserId}`
+                  ? 'text-slate-900 border-slate-900 dark:text-white dark:border-white'
+                  : 'text-slate-500 border-transparent hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+              }`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={profile?.profile_photo_url || defaultAvatar(profile?.full_name || 'Member')} 
-                alt="Profile Avatar" 
-                className="w-full h-full object-cover"
-              />
+              <div className="w-5.5 h-5.5 rounded-full overflow-hidden border border-slate-200 dark:border-slate-800 flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img 
+                  src={profile?.profile_photo_url || defaultAvatar(profile?.full_name || 'Member')} 
+                  alt="Avatar" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <span className="text-[10px] font-semibold mt-1 flex items-center gap-0.5 tracking-tight">
+                Me
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </span>
             </Link>
           )}
 
-          {/* Logout Button */}
+          {/* Simple Logout button modeled after premium dropdown */}
           <button
             onClick={handleLogout}
-            className="px-3.5 py-1.5 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+            className="h-14 flex flex-col items-center justify-center min-w-16 px-1 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors border-b-2 border-transparent cursor-pointer"
           >
-            Log out
+            <svg className="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span className="text-[10px] font-semibold mt-1 tracking-tight">Logout</span>
           </button>
         </nav>
 

@@ -101,6 +101,8 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile, de
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [showConnectingCard, setShowConnectingCard] = useState(true);
 
   // Comments states
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
@@ -560,110 +562,248 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile, de
     : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       
-      {/* A. Publishing Form Box */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-md rounded-3xl p-6 transition-colors">
-        <form onSubmit={handleCreatePost} className="space-y-4">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={currentUserProfile?.profile_photo_url || defaultAvatar(currentUserProfile?.full_name || currentUser.email || 'Member')} 
-                alt="Avatar" 
-                className="w-full h-full object-cover"
-              />
-            </div>
-            
-            <div className="flex-1 relative">
-              <textarea
-                value={newPostContent}
-                onChange={(e) => handlePostContentChange(e.target.value)}
-                placeholder="What is on your mind? Share a story, project milestone, or referral..."
-                rows={3}
-                className="w-full resize-none bg-transparent placeholder-slate-400 focus:outline-none text-sm text-slate-800 dark:text-slate-200 py-1.5"
-              />
-
-              {/* @Mentions dropdown autocomplete suggestions */}
-              {postDropdownSuggestions.length > 0 && (
-                <div className="absolute left-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl w-60 z-40 overflow-hidden">
-                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 border-b border-slate-100 dark:border-slate-800">MENTION PEOPLE</div>
-                  {postDropdownSuggestions.map((friend) => (
-                    <button
-                      key={friend.id}
-                      type="button"
-                      onClick={() => handleSelectPostMention(friend)}
-                      className="w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      <div className="w-6 h-6 rounded-full overflow-hidden shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={friend.profile_photo_url || defaultAvatar(friend.full_name)} alt="Avatar" className="w-full h-full object-cover" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{friend.full_name}</p>
-                      </div>
-                    </button>
-                  ))}
+      {/* 0. Campus Classmate Promo Banner Card ("Are you hiring?" style) */}
+      {showConnectingCard && (
+        <div className="bg-white dark:bg-slate-900 border border-[#dfdfdf] dark:border-slate-800 shadow-sm rounded-xl overflow-hidden transition-colors relative">
+          <button 
+            onClick={() => setShowConnectingCard(false)}
+            className="absolute top-3 right-3 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+            title="Dismiss"
+          >
+            <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          
+          <div className="p-6 text-center flex flex-col items-center">
+            <div className="relative mb-3">
+              {/* Circular picture with gradient border matching Somya's avatar in screenshot */}
+              <div className="w-18 h-18 rounded-full p-0.5 bg-gradient-to-tr from-purple-600 via-pink-500 to-blue-500 flex items-center justify-center">
+                <div className="w-full h-full rounded-full overflow-hidden border border-white dark:border-slate-900 bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src={currentUserProfile?.profile_photo_url || defaultAvatar(currentUserProfile?.full_name || currentUser.email || 'Member')} 
+                    alt="Avatar" 
+                    className="w-full h-full object-cover"
+                  />
                 </div>
-              )}
+              </div>
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-purple-600 text-white font-extrabold text-[8px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-white dark:border-slate-900 shadow-sm">
+                #CONNECTING
+              </span>
+            </div>
 
+            <h3 className="text-sm font-bold text-slate-850 dark:text-white mt-2">
+              Hi {currentUserProfile?.full_name?.split(' ')[0] || 'there'}, are you networking?
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm leading-relaxed">
+              Classmates active on ABES Connect are 42% more likely to secure internship referrals and job interviews!
+            </p>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+              <Link 
+                href="/directory"
+                className="px-5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-full shadow-sm shadow-blue-500/10 transition-all cursor-pointer"
+              >
+                Yes, find connections
+              </Link>
+              <button 
+                onClick={() => setShowConnectingCard(false)}
+                className="px-5 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-955/20 font-bold text-xs rounded-full transition-all cursor-pointer"
+              >
+                No, not right now
+              </button>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Optional Image Attachment Preview */}
-          {imagePreview && (
-            <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={imagePreview} 
-                alt="Upload Preview" 
-                className="max-h-80 w-full object-contain mx-auto"
-              />
-              <button
-                type="button"
-                onClick={clearSelectedImage}
-                className="absolute top-3 right-3 p-1.5 rounded-full bg-slate-900/60 text-white hover:bg-slate-900 transition-colors cursor-pointer"
-                title="Remove image"
+      {/* A. Start a Post Card */}
+      <div className="bg-white dark:bg-slate-900 border border-[#dfdfdf] dark:border-slate-800 shadow-sm rounded-xl p-4 transition-colors">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src={currentUserProfile?.profile_photo_url || defaultAvatar(currentUserProfile?.full_name || currentUser.email || 'Member')} 
+              alt="Avatar" 
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <button 
+            type="button"
+            onClick={() => setShowPostModal(true)}
+            className="flex-1 text-left bg-[#f4f2ee] hover:bg-slate-200 dark:bg-slate-950 dark:hover:bg-slate-800 border border-slate-350 dark:border-slate-800 rounded-full px-5 py-3 text-sm text-slate-500 dark:text-slate-400 font-semibold transition-colors cursor-pointer"
+          >
+            Start a post
+          </button>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-805">
+          <button 
+            type="button"
+            onClick={() => { setShowPostModal(true); setTimeout(() => fileInputRef.current?.click(), 100); }}
+            className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800/50 rounded-lg cursor-pointer transition-colors"
+          >
+            <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Photo
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => setShowPostModal(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800/50 rounded-lg cursor-pointer transition-colors"
+          >
+            <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Video
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => setShowPostModal(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800/50 rounded-lg cursor-pointer transition-colors"
+          >
+            <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 4a2 2 0 00-2-2h-3m3 2a2 2 0 00-2-2M9 11l3 3L22 4" />
+            </svg>
+            Write article
+          </button>
+        </div>
+      </div>
+
+      {/* Modal Dialog for Posting */}
+      {showPostModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Create a post</h2>
+              <button 
+                onClick={() => { setShowPostModal(false); setNewPostContent(''); clearSelectedImage(); }}
+                className="p-1 rounded-lg hover:bg-slate-105 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-          )}
 
-          {postError && (
-            <div className="p-3 text-xs text-red-650 bg-red-50 dark:bg-red-950/20 dark:text-red-400 rounded-xl border border-red-100 dark:border-red-900/30">
-              {postError}
-            </div>
-          )}
+            {/* Modal Body */}
+            <form onSubmit={(e) => { handleCreatePost(e); setShowPostModal(false); }} className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {/* User details */}
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full overflow-hidden border border-slate-200 dark:border-slate-800">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img 
+                      src={currentUserProfile?.profile_photo_url || defaultAvatar(currentUserProfile?.full_name || currentUser.email || 'Member')} 
+                      alt="Avatar" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      {currentUserProfile?.full_name || currentUser.email?.split('@')[0]}
+                    </h3>
+                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                      Post to anyone
+                    </span>
+                  </div>
+                </div>
 
-          {/* Form Actions Footer */}
-          <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80">
-            <label className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 hover:text-blue-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-blue-400 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors">
-              <input 
-                type="file" 
-                ref={fileInputRef}
-                accept="image/*" 
-                className="hidden" 
-                onChange={handleImageChange}
-              />
-              <svg className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              Photo
-            </label>
+                {/* Textarea */}
+                <div className="relative">
+                  <textarea
+                    value={newPostContent}
+                    onChange={(e) => handlePostContentChange(e.target.value)}
+                    placeholder="What do you want to talk about?"
+                    rows={6}
+                    className="w-full resize-none bg-transparent placeholder-slate-400 focus:outline-none text-sm text-slate-800 dark:text-slate-200"
+                    autoFocus
+                  />
 
-            <button
-              type="submit"
-              disabled={publishing || (!newPostContent.trim() && !selectedFile)}
-              className="px-6 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-sm transition-colors cursor-pointer"
-            >
-              {publishing ? 'Publishing...' : 'Publish'}
-            </button>
+                  {/* Autocomplete suggestions */}
+                  {postDropdownSuggestions.length > 0 && (
+                    <div className="absolute left-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-xl w-60 z-50 overflow-hidden">
+                      <div className="px-3 py-1.5 text-[9px] font-extrabold text-slate-400 border-b border-slate-100 dark:border-slate-800">MENTION PEOPLE</div>
+                      {postDropdownSuggestions.map((friend) => (
+                        <button
+                          key={friend.id}
+                          type="button"
+                          onClick={() => handleSelectPostMention(friend)}
+                          className="w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-slate-55 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <div className="w-6 h-6 rounded-full overflow-hidden shrink-0">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={friend.profile_photo_url || defaultAvatar(friend.full_name)} alt="Avatar" className="w-full h-full object-cover" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{friend.full_name}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Optional Image Preview */}
+                {imagePreview && (
+                  <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imagePreview} alt="Preview" className="max-h-60 w-full object-contain mx-auto" />
+                    <button
+                      type="button"
+                      onClick={clearSelectedImage}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/70 text-white hover:bg-slate-900 transition-colors cursor-pointer"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer Actions */}
+              {postError && (
+                <div className="mx-5 p-3 text-xs text-red-650 bg-red-50 dark:bg-red-950/20 dark:text-red-400 rounded-xl border border-red-100 dark:border-red-900/30">
+                  {postError}
+                </div>
+              )}
+
+              <div className="px-5 py-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-1">
+                  <label className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full cursor-pointer transition-all">
+                    <input 
+                      type="file" 
+                      ref={fileInputRef}
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleImageChange}
+                    />
+                    <svg className="w-5.5 h-5.5 text-slate-550 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </label>
+                </div>
+                <button
+                  type="submit"
+                  disabled={publishing || (!newPostContent.trim() && !selectedFile)}
+                  className="px-6 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs disabled:opacity-40 transition-all cursor-pointer shadow-md shadow-blue-500/20"
+                >
+                  {publishing ? 'Posting...' : 'Post'}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
-      </div>
+        </div>
+      )}
 
       {/* B. Community Feed List */}
       <div className="space-y-4">
@@ -693,12 +833,12 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile, de
             return (
               <div 
                 key={post.id} 
-                className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-md rounded-3xl p-6 transition-colors space-y-4 relative"
+                className="bg-white dark:bg-slate-900 border border-[#dfdfdf] dark:border-slate-800 shadow-sm rounded-xl p-4 transition-colors space-y-3.5 relative"
               >
                 {/* Author Info Header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Link href={`/profile/${post.author_id}`} className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800 hover:opacity-85 transition-opacity">
+                    <Link href={`/profile/${post.author_id}`} className="w-11 h-11 rounded-full overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800 hover:opacity-85 transition-opacity">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img 
                         src={post.author?.profile_photo_url || defaultAvatar(post.author?.full_name || 'Member')} 
