@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import FloatingChatbox from './FloatingChatbox';
 
 interface Profile {
   id: string;
@@ -227,6 +228,8 @@ export default function Navigation() {
           </div>
         </nav>
       )}
+      {/* Global Collapsible Chat Widget Support */}
+      <FloatingChatbox />
     </header>
   );
 }

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import ConnectButton from './ConnectButton';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 interface Profile {
   id: string;
@@ -114,7 +113,6 @@ export default function ProfileDetails({
 
   const [posts, setPosts] = useState<UserPost[]>(initialPosts);
 
-  const router = useRouter();
   const [loadingChat, setLoadingChat] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
@@ -177,7 +175,7 @@ export default function ProfileDetails({
       if (findError) throw findError;
 
       if (existing) {
-        router.push(`/messages?convId=${existing.id}`);
+        window.dispatchEvent(new CustomEvent('open-chatbox', { detail: { convId: existing.id } }));
       } else {
         // 2. Create new conversation
         const { data: created, error: createError } = await supabase
@@ -191,7 +189,7 @@ export default function ProfileDetails({
 
         if (createError) throw createError;
 
-        router.push(`/messages?convId=${created.id}`);
+        window.dispatchEvent(new CustomEvent('open-chatbox', { detail: { convId: created.id } }));
       }
     } catch (err) {
       console.error('Error starting conversation:', err);
