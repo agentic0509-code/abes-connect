@@ -70,7 +70,7 @@ export default async function HomePage() {
       user_id,
       type
     ),
-    parent:posts (
+    parent:posts!parent_id (
       id,
       content,
       image_url,
@@ -105,7 +105,7 @@ export default async function HomePage() {
     .order('created_at', { ascending: false });
 
   if (postsError) {
-    console.error('Error fetching posts feed:', postsError);
+    console.warn('Error fetching posts feed:', postsError);
   }
 
   let posts = rawPosts || [];
@@ -127,7 +127,7 @@ export default async function HomePage() {
 
     const { data: communityPosts, error: fallbackError } = await fallbackQuery;
     if (fallbackError) {
-      console.error('Error fetching fallback community posts:', fallbackError);
+      console.warn('Error fetching fallback community posts:', fallbackError);
     }
     if (communityPosts) {
       posts = [...posts, ...communityPosts];
