@@ -73,6 +73,42 @@ export default async function ProfilePage({
     .eq('profile_id', profileId)
     .order('start_date', { ascending: false });
 
+  // 8. Fetch user's own posts (newest first)
+  const { data: userPosts, error: postsError } = await supabase
+    .from('posts')
+    .select(`
+      id,
+      author_id,
+      content,
+      image_url,
+      created_at,
+      parent_id,
+      reactions (
+        post_id,
+        user_id,
+        type
+      ),
+      comments (
+        id,
+        post_id,
+        author_id,
+        content,
+        created_at
+      )
+    `)
+    .eq('author_id', profileId)
+    .order('created_at', { ascending: false });
+
+  if (postsError) {
+    console.error('Error fetching user posts:', postsError);
+  }
+
+  // Temporary logging of profile ID and post count
+  console.log('--- PROFILE POSTS DIAGNOSTICS ---');
+  console.log('Profile ID being viewed:', profileId);
+  console.log('Number of posts returned:', userPosts?.length || 0);
+  console.log('---------------------------------');
+
   const isOwner = user?.id === profileId;
 
   if (!profile) {
@@ -133,6 +169,7 @@ export default async function ProfilePage({
             initialEducation={education || []}
             initialCertifications={certifications || []}
             initialProjects={projects || []}
+            initialPosts={userPosts || []}
           />
 
         </div>

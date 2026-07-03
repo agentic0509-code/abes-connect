@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import ConnectButton from './ConnectButton';
+import Link from 'next/link';
 
 interface Profile {
   id: string;
@@ -60,6 +61,31 @@ interface Project {
   end_date: string | null;
 }
 
+interface PostReaction {
+  post_id: string;
+  user_id: string;
+  type: 'like' | 'celebrate' | 'support' | 'love' | 'insightful' | 'funny';
+}
+
+interface PostComment {
+  id: string;
+  post_id: string;
+  author_id: string;
+  content: string;
+  created_at: string;
+}
+
+interface UserPost {
+  id: string;
+  author_id: string;
+  content: string;
+  image_url: string | null;
+  created_at: string;
+  parent_id: string | null;
+  reactions: PostReaction[];
+  comments: PostComment[];
+}
+
 interface ProfileDetailsProps {
   profile: Profile;
   isOwner: boolean;
@@ -69,6 +95,7 @@ interface ProfileDetailsProps {
   initialEducation: Education[];
   initialCertifications: Certification[];
   initialProjects: Project[];
+  initialPosts: UserPost[];
 }
 
 export default function ProfileDetails({
@@ -80,13 +107,28 @@ export default function ProfileDetails({
   initialEducation,
   initialCertifications,
   initialProjects,
+  initialPosts,
 }: ProfileDetailsProps) {
   const supabase = createClient();
+
+  const [posts, setPosts] = useState<UserPost[]>(initialPosts);
 
   // Core Section States
   const [about, setAbout] = useState(profile.about || '');
   const [isEditingAbout, setIsEditingAbout] = useState(false);
   const [savingAbout, setSavingAbout] = useState(false);
+
+  const handleDeletePost = async (postId: string) => {
+    if (!confirm('Are you sure you want to delete this post?')) return;
+    try {
+      const { error } = await supabase.from('posts').delete().eq('id', postId);
+      if (error) throw error;
+      setPosts(posts.filter((p) => p.id !== postId));
+    } catch (err) {
+      console.error('Error deleting post:', err);
+      alert('Failed to delete post.');
+    }
+  };
 
   const [skills, setSkills] = useState<string[]>(profile.skills || []);
   const [newSkill, setNewSkill] = useState('');
@@ -708,6 +750,77 @@ export default function ProfileDetails({
                 </div>
               ) : 'No bio summary added yet.'
             )}
+          </div>
+        )}
+      </div>
+
+      {/* 2.5. Activity / Posts Section */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 shadow-md rounded-3xl p-8 transition-colors space-y-6">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Activity</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">Posts published by {profile.full_name}</p>
+          </div>
+          {isOwner && (
+            <Link
+              href="/home"
+              className="px-4 py-2 text-xs font-bold rounded-xl text-blue-650 bg-blue-50 dark:bg-blue-955/40 dark:text-blue-300 hover:bg-blue-100 transition-all cursor-pointer"
+            >
+              Create a Post
+            </Link>
+          )}
+        </div>
+
+        {posts.length === 0 ? (
+          <div className="p-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center text-slate-500 text-sm">
+            {isOwner 
+              ? "You haven't shared any posts yet. Start sharing achievements or opportunities on the home feed!"
+              : `${profile.full_name} hasn't published any posts yet.`
+            }
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {posts.map((post) => (
+              <div key={post.id} className="p-4 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/60 rounded-2xl space-y-2 relative group transition-all">
+                
+                {isOwner && (
+                  <button
+                    onClick={() => handleDeletePost(post.id)}
+                    className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-650 dark:hover:bg-red-950/20 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    title="Delete post"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
+
+                <div className="text-xs text-slate-450 dark:text-slate-500 font-medium">
+                  {new Date(post.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+
+                <p className="text-sm text-slate-800 dark:text-slate-250 whitespace-pre-line leading-relaxed pr-8">
+                  {post.content.replace(/@\[([^\]]+)\]\(([^)]+)\)/g, '@$1')}
+                </p>
+
+                {post.image_url && (
+                  <div className="rounded-xl overflow-hidden border border-slate-100 dark:border-slate-850 max-h-48 flex items-center justify-center bg-slate-50/50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={post.image_url} alt="Attachment" className="max-h-48 w-full object-contain" />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 text-xs font-semibold text-slate-500 dark:text-slate-450 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <span className="flex items-center gap-1 font-medium">
+                    👍 {post.reactions.length} {post.reactions.length === 1 ? 'reaction' : 'reactions'}
+                  </span>
+                  <span className="flex items-center gap-1 font-medium">
+                    💬 {post.comments.length} {post.comments.length === 1 ? 'comment' : 'comments'}
+                  </span>
+                </div>
+
+              </div>
+            ))}
           </div>
         )}
       </div>
