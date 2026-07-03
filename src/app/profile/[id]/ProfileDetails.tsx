@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import ConnectButton from './ConnectButton';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Profile {
   id: string;
@@ -113,10 +114,59 @@ export default function ProfileDetails({
 
   const [posts, setPosts] = useState<UserPost[]>(initialPosts);
 
+  const router = useRouter();
+  const [loadingChat, setLoadingChat] = useState(false);
+
   // Core Section States
   const [about, setAbout] = useState(profile.about || '');
   const [isEditingAbout, setIsEditingAbout] = useState(false);
   const [savingAbout, setSavingAbout] = useState(false);
+
+  const handleOpenChat = async () => {
+    if (connectionStatus !== 'connected') {
+      alert('You can only message people you are connected with.');
+      return;
+    }
+
+    setLoadingChat(true);
+    try {
+      // Sort participant IDs so participant_1 < participant_2 in database schema constraint
+      const [p1, p2] = [currentUserId, profile.id].sort();
+
+      // 1. Check if conversation already exists
+      const { data: existing, error: findError } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('participant_1', p1)
+        .eq('participant_2', p2)
+        .maybeSingle();
+
+      if (findError) throw findError;
+
+      if (existing) {
+        router.push(`/messages?convId=${existing.id}`);
+      } else {
+        // 2. Create new conversation
+        const { data: created, error: createError } = await supabase
+          .from('conversations')
+          .insert({
+            participant_1: p1,
+            participant_2: p2,
+          })
+          .select('id')
+          .single();
+
+        if (createError) throw createError;
+
+        router.push(`/messages?convId=${created.id}`);
+      }
+    } catch (err) {
+      console.error('Error starting conversation:', err);
+      alert('Failed to start conversation.');
+    } finally {
+      setLoadingChat(false);
+    }
+  };
 
   const handleDeletePost = async (postId: string) => {
     if (!confirm('Are you sure you want to delete this post?')) return;
@@ -686,8 +736,22 @@ export default function ProfileDetails({
                   currentUserId={currentUserId}
                   initialStatus={connectionStatus}
                 />
-                <button className="px-5 py-2.5 rounded-xl font-bold border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm transition-all cursor-pointer">
-                  Message
+                <button
+                  onClick={handleOpenChat}
+                  disabled={loadingChat}
+                  className={`px-5 py-2.5 rounded-xl font-bold border text-sm transition-all cursor-pointer flex items-center gap-1.5 ${
+                    connectionStatus === 'connected'
+                      ? 'border-blue-600 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-955/40 dark:text-blue-350 dark:border-blue-700'
+                      : 'border-slate-350 dark:border-slate-700 text-slate-400 dark:text-slate-655 cursor-not-allowed'
+                  }`}
+                  title={connectionStatus === 'connected' ? 'Open chat thread' : 'You must be connected to message'}
+                >
+                  {connectionStatus !== 'connected' && (
+                    <svg className="w-4 h-4 text-slate-450 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  )}
+                  {loadingChat ? 'Connecting...' : 'Message'}
                 </button>
               </div>
             )}
