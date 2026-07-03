@@ -50,6 +50,7 @@ function MessagesPageContent() {
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load conversations list
@@ -251,6 +252,38 @@ function MessagesPageContent() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // 3.5 Setup Supabase Presence for Active Status Tracking
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const presenceChannel = supabase.channel('online-users', {
+      config: {
+        presence: {
+          key: currentUserId,
+        },
+      },
+    });
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const onlineIds = Object.keys(state);
+        setOnlineUsers(onlineIds);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            user_id: currentUserId,
+            online_at: new Date().toISOString(),
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [currentUserId, supabase]);
 
   // 3. Setup Supabase Realtime Listeners
   useEffect(() => {
@@ -515,13 +548,18 @@ function MessagesPageContent() {
                         isSelected ? 'bg-blue-50/50 dark:bg-blue-955/20 border-l-4 border-blue-600' : 'border-l-4 border-transparent'
                       }`}
                     >
-                      <div className="w-12 h-12 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0 border border-slate-200/50 dark:border-slate-800">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img 
-                          src={c.otherUser?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(c.otherUser?.full_name || '')}`} 
-                          alt={c.otherUser?.full_name} 
-                          className="w-full h-full object-cover"
-                        />
+                      <div className="relative flex-shrink-0">
+                        <div className="w-12 h-12 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200/50 dark:border-slate-800">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img 
+                            src={c.otherUser?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(c.otherUser?.full_name || '')}`} 
+                            alt={c.otherUser?.full_name} 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 ${
+                          onlineUsers.includes(c.otherUser?.id || '') ? 'bg-green-500 shadow-[0_0_8px_#10b981]' : 'bg-red-500'
+                        }`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline justify-between mb-0.5">
@@ -575,15 +613,20 @@ function MessagesPageContent() {
                   </button>
 
                   <div 
-                    className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0 cursor-pointer"
+                    className="relative w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex-shrink-0 cursor-pointer"
                     onClick={() => router.push(`/profile/${activeConversation.otherUser?.id}`)}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img 
-                      src={activeConversation.otherUser?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(activeConversation.otherUser?.full_name || '')}`} 
-                      alt={activeConversation.otherUser?.full_name} 
-                      className="w-full h-full object-cover"
-                    />
+                    <div className="w-full h-full rounded-xl overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img 
+                        src={activeConversation.otherUser?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(activeConversation.otherUser?.full_name || '')}`} 
+                        alt={activeConversation.otherUser?.full_name} 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 ${
+                      onlineUsers.includes(activeConversation.otherUser?.id || '') ? 'bg-green-500 shadow-[0_0_6px_#10b981]' : 'bg-red-500'
+                    }`} />
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -744,13 +787,18 @@ function MessagesPageContent() {
                     onClick={() => handleStartNewChat(profile.id)}
                     className="w-full p-2.5 flex items-center gap-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-850/50 text-left transition-colors cursor-pointer"
                   >
-                    <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={profile.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.full_name)}`} 
-                        alt={profile.full_name} 
-                        className="w-full h-full object-cover"
-                      />
+                    <div className="relative flex-shrink-0">
+                      <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={profile.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.full_name)}`} 
+                          alt={profile.full_name} 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 ${
+                        onlineUsers.includes(profile.id) ? 'bg-green-500 shadow-[0_0_6px_#10b981]' : 'bg-red-500'
+                      }`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-bold text-slate-900 dark:text-white truncate block">

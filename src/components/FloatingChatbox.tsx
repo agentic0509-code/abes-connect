@@ -45,6 +45,7 @@ export default function FloatingChatbox() {
   const [loading, setLoading] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
 
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load conversations list
@@ -182,6 +183,38 @@ export default function FloatingChatbox() {
       scrollToBottom();
     }
   }, [messages, isOpen]);
+
+  // 1.5 Setup Supabase Presence for Active Status Tracking
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const presenceChannel = supabase.channel('online-users', {
+      config: {
+        presence: {
+          key: currentUserId,
+        },
+      },
+    });
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const onlineIds = Object.keys(state);
+        setOnlineUsers(onlineIds);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            user_id: currentUserId,
+            online_at: new Date().toISOString(),
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [currentUserId, supabase]);
 
   // 2. Setup Supabase Realtime Listeners
   useEffect(() => {
@@ -377,18 +410,23 @@ export default function FloatingChatbox() {
                   </svg>
                 </button>
                 <div 
-                  className="w-7 h-7 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-850 cursor-pointer"
+                  className="relative w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-850 cursor-pointer"
                   onClick={() => {
                     setIsOpen(false);
                     router.push(`/profile/${activeConversation.otherUser?.id}`);
                   }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img 
-                    src={activeConversation.otherUser?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(activeConversation.otherUser?.full_name || '')}`} 
-                    alt={activeConversation.otherUser?.full_name} 
-                    className="w-full h-full object-cover"
-                  />
+                  <div className="w-full h-full rounded-lg overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img 
+                      src={activeConversation.otherUser?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(activeConversation.otherUser?.full_name || '')}`} 
+                      alt={activeConversation.otherUser?.full_name} 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-white dark:border-slate-900 ${
+                    onlineUsers.includes(activeConversation.otherUser?.id || '') ? 'bg-green-500 shadow-[0_0_4px_#10b981]' : 'bg-red-500'
+                  }`} />
                 </div>
                 <span 
                   className="text-xs font-bold text-slate-900 dark:text-white truncate cursor-pointer hover:underline"
@@ -490,13 +528,18 @@ export default function FloatingChatbox() {
                     }}
                     className="w-full p-3 flex items-start gap-2.5 text-left hover:bg-slate-50/80 dark:hover:bg-slate-850/30 transition-colors"
                   >
-                    <div className="w-9 h-9 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-855 flex-shrink-0 border border-slate-200/50 dark:border-slate-800">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={c.otherUser?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(c.otherUser?.full_name || '')}`} 
-                        alt={c.otherUser?.full_name} 
-                        className="w-full h-full object-cover"
-                      />
+                    <div className="relative flex-shrink-0">
+                      <div className="w-9 h-9 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-855 border border-slate-200/50 dark:border-slate-800">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={c.otherUser?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(c.otherUser?.full_name || '')}`} 
+                          alt={c.otherUser?.full_name} 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-white dark:border-slate-900 ${
+                        onlineUsers.includes(c.otherUser?.id || '') ? 'bg-green-500 shadow-[0_0_4px_#10b981]' : 'bg-red-500'
+                      }`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline justify-between mb-0.5">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import ConnectButton from './ConnectButton';
 import Link from 'next/link';
@@ -116,6 +116,39 @@ export default function ProfileDetails({
 
   const router = useRouter();
   const [loadingChat, setLoadingChat] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+
+  // 3.5 Setup Supabase Presence for Active Status Tracking
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const presenceChannel = supabase.channel('online-users', {
+      config: {
+        presence: {
+          key: currentUserId,
+        },
+      },
+    });
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const onlineIds = Object.keys(state);
+        setOnlineUsers(onlineIds);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            user_id: currentUserId,
+            online_at: new Date().toISOString(),
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [currentUserId, supabase]);
 
   // Core Section States
   const [about, setAbout] = useState(profile.about || '');
@@ -691,7 +724,7 @@ export default function ProfileDetails({
           
           {/* Avatar overlay */}
           <div className="relative -mt-20 mb-4 inline-block">
-            <div className="w-32 h-32 rounded-3xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-xl flex items-center justify-center">
+            <div className="w-32 h-32 rounded-3xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-xl flex items-center justify-center relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img 
                 src={profile.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.full_name)}`} 
@@ -699,6 +732,11 @@ export default function ProfileDetails({
                 className="w-full h-full object-cover"
               />
             </div>
+            <span className={`absolute bottom-1 right-1 w-5.5 h-5.5 rounded-full border-4 border-white dark:border-slate-900 ${
+              onlineUsers.includes(profile.id) ? 'bg-green-500 shadow-[0_0_10px_#10b981]' : 'bg-red-500'
+            }`} 
+              title={onlineUsers.includes(profile.id) ? 'Active Now' : 'Offline'}
+            />
           </div>
 
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
