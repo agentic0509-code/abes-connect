@@ -3,6 +3,8 @@ import Link from 'next/link';
 import Feed, { Post } from './Feed';
 import Navigation from '@/components/Navigation';
 
+export const dynamic = 'force-dynamic';
+
 export default async function HomePage() {
   const supabase = await createClient();
   const {
@@ -50,53 +52,55 @@ export default async function HomePage() {
 
   const feedUserIds = [user.id, ...friendIds];
 
-  // 2. Fetch connection-filtered community feed with author profile, reactions, comments, and nested parent reposts
-  const { data: rawPosts, error: postsError } = await supabase
-    .from('posts')
-    .select(`
+  const postSelectSchema = `
+    id,
+    author_id,
+    content,
+    image_url,
+    created_at,
+    parent_id,
+    author:profiles (
       id,
-      author_id,
+      full_name,
+      profile_photo_url,
+      headline
+    ),
+    reactions (
+      post_id,
+      user_id,
+      type
+    ),
+    parent:posts (
+      id,
       content,
       image_url,
       created_at,
-      parent_id,
       author:profiles (
         id,
         full_name,
         profile_photo_url,
         headline
-      ),
-      reactions (
-        post_id,
-        user_id,
-        type
-      ),
-      parent:posts (
-        id,
-        content,
-        image_url,
-        created_at,
-        author:profiles (
-          id,
-          full_name,
-          profile_photo_url,
-          headline
-        )
-      ),
-      comments (
-        id,
-        post_id,
-        author_id,
-        content,
-        created_at,
-        author:profiles (
-          id,
-          full_name,
-          profile_photo_url,
-          headline
-        )
       )
-    `)
+    ),
+    comments (
+      id,
+      post_id,
+      author_id,
+      content,
+      created_at,
+      author:profiles (
+        id,
+        full_name,
+        profile_photo_url,
+        headline
+      )
+    )
+  `;
+
+  // 2. Fetch connection-filtered community feed with author profile, reactions, comments, and nested parent reposts
+  const { data: rawPosts, error: postsError } = await supabase
+    .from('posts')
+    .select(postSelectSchema)
     .in('author_id', feedUserIds)
     .order('created_at', { ascending: false });
 
@@ -104,15 +108,38 @@ export default async function HomePage() {
     console.error('Error fetching posts feed:', postsError);
   }
 
+  let posts = rawPosts || [];
+
+  // 3. Fallback/Fill: If connection feed has less than 6 posts, fill with public community posts to keep page active
+  if (posts.length < 6) {
+    const existingPostIds = posts.map((p) => p.id);
+    const limitNeeded = 6 - posts.length;
+
+    let fallbackQuery = supabase
+      .from('posts')
+      .select(postSelectSchema)
+      .order('created_at', { ascending: false })
+      .limit(limitNeeded);
+
+    if (existingPostIds.length > 0) {
+      fallbackQuery = fallbackQuery.not('id', 'in', `(${existingPostIds.join(',')})`);
+    }
+
+    const { data: communityPosts, error: fallbackError } = await fallbackQuery;
+    if (fallbackError) {
+      console.error('Error fetching fallback community posts:', fallbackError);
+    }
+    if (communityPosts) {
+      posts = [...posts, ...communityPosts];
+    }
+  }
+
   // Temporary feed query debug logging
   console.log('--- FEED QUERY DIAGNOSTICS ---');
   console.log('ME (Currently Logged-in User ID):', user.id);
   console.log('Resolved Connection IDs (Friend list):', friendIds);
-  console.log('Number of Posts Returned in Feed:', rawPosts?.length || 0);
+  console.log('Number of Posts Returned in Feed:', posts.length);
   console.log('------------------------------');
-
-  // Default to empty array if posts fetch returns null
-  const posts = rawPosts || [];
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 transition-colors duration-300">
