@@ -33,11 +33,16 @@ export default async function HomePage() {
 
 
 
-  // 1.5 Fetch accepted connections to construct feed audience
-  const { data: connections } = await supabase
+  // 1.5 Fetch accepted connections with explicit bi-directional user.id checking
+  const { data: connections, error: connError } = await supabase
     .from('connections')
     .select('requester_id, receiver_id')
-    .eq('status', 'accepted');
+    .eq('status', 'accepted')
+    .or(`requester_id.eq.${user.id},receiver_id.eq.${user.id}`);
+
+  if (connError) {
+    console.error('Error fetching connections:', connError);
+  }
 
   const friendIds = connections?.map((c) =>
     c.requester_id === user.id ? c.receiver_id : c.requester_id
@@ -99,6 +104,13 @@ export default async function HomePage() {
     console.error('Error fetching posts feed:', postsError);
   }
 
+  // Temporary feed query debug logging
+  console.log('--- FEED QUERY DIAGNOSTICS ---');
+  console.log('ME (Currently Logged-in User ID):', user.id);
+  console.log('Resolved Connection IDs (Friend list):', friendIds);
+  console.log('Number of Posts Returned in Feed:', rawPosts?.length || 0);
+  console.log('------------------------------');
+
   // Default to empty array if posts fetch returns null
   const posts = rawPosts || [];
 
@@ -157,6 +169,7 @@ export default async function HomePage() {
             initialPosts={posts as unknown as Post[]} 
             currentUser={user} 
             currentUserProfile={currentUserProfile} 
+            debugData={{ me: user.id, connectionIds: friendIds, postCount: posts.length }}
           />
         </div>
 

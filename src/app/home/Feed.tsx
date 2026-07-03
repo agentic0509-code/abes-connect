@@ -52,6 +52,11 @@ interface FeedProps {
     email?: string;
   };
   currentUserProfile: Profile | null;
+  debugData: {
+    me: string;
+    connectionIds: string[];
+    postCount: number;
+  };
 }
 
 const REACTION_TYPES = [
@@ -84,7 +89,7 @@ function formatTimeAgo(dateString: string): string {
   }
 }
 
-export default function Feed({ initialPosts, currentUser, currentUserProfile }: FeedProps) {
+export default function Feed({ initialPosts, currentUser, currentUserProfile, debugData }: FeedProps) {
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -129,6 +134,15 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile }: 
     }
     loadProfiles();
   }, [supabase]);
+
+  // Temporary browser debug console logging
+  useEffect(() => {
+    console.log('--- FEED BROWSER DIAGNOSTICS ---');
+    console.log('ME (Currently Logged-in User ID):', debugData.me);
+    console.log('Resolved Connection IDs (Friend list):', debugData.connectionIds);
+    console.log('Number of Posts Returned in Feed:', debugData.postCount);
+    console.log('--------------------------------');
+  }, [debugData]);
 
   // Parse mentions into clickable Link nodes
   const parseContentWithMentions = (text: string) => {
