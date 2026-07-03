@@ -59,7 +59,7 @@ export default async function HomePage() {
     image_url,
     created_at,
     parent_id,
-    author:profiles (
+    author:profiles!posts_author_id_fkey (
       id,
       full_name,
       profile_photo_url,
@@ -75,7 +75,7 @@ export default async function HomePage() {
       content,
       image_url,
       created_at,
-      author:profiles (
+      author:profiles!posts_author_id_fkey (
         id,
         full_name,
         profile_photo_url,
