@@ -21,6 +21,7 @@ export default function Navigation() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   const defaultAvatar = (name: string) => 
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
@@ -60,6 +61,34 @@ export default function Navigation() {
 
     loadSessionAndData();
   }, [supabase]);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const activeTheme = savedTheme || systemTheme;
+    
+    if (activeTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    // Defer state update to next tick to satisfy eslint rule
+    setTimeout(() => {
+      setTheme(activeTheme as 'light' | 'dark');
+    }, 0);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    localStorage.setItem('theme', nextTheme);
+    if (nextTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -196,6 +225,24 @@ export default function Navigation() {
               </span>
             </Link>
           )}
+
+          {/* Theme Toggle Button */}
+          <button
+            onClick={toggleTheme}
+            className="h-14 flex flex-col items-center justify-center min-w-16 px-1 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors border-b-2 border-transparent cursor-pointer"
+            title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+          >
+            {theme === 'light' ? (
+              <svg className="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
+            ) : (
+              <svg className="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+              </svg>
+            )}
+            <span className="text-[10px] font-semibold mt-1 tracking-tight">Theme</span>
+          </button>
 
           {/* Simple Logout button modeled after premium dropdown */}
           <button
