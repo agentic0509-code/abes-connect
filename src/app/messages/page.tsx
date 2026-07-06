@@ -53,6 +53,25 @@ function MessagesPageContent() {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Emojis / GIFs overlays
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+
+  // Edit / Undo state
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState('');
+
+  const COMMON_EMOJIS = ['😀', '😂', '😍', '👍', '🎉', '🔥', '🚀', '❤️', '👏', '💡', '😢', '😮'];
+
+  const POPULAR_GIFs = [
+    { name: 'Celebrate', url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnq0/giphy.gif' },
+    { name: 'Agree', url: 'https://media.giphy.com/media/26kLTT814tbgn1IGc/giphy.gif' },
+    { name: 'Wow', url: 'https://media.giphy.com/media/26ufdipODXM5lhKSI/giphy.gif' },
+    { name: 'Haha', url: 'https://media.giphy.com/media/3o7TKSjRrfIPjei1Hi/giphy.gif' },
+    { name: 'Congrats', url: 'https://media.giphy.com/media/3oz8xAFtqo0LGR2TgK/giphy.gif' }
+  ];
+
+
   // Load conversations list
   const loadConversations = useCallback(async (userId: string) => {
     const { data, error } = await supabase
@@ -191,6 +210,81 @@ function MessagesPageContent() {
     }
   }, [supabase, currentUserId]);
 
+  const handleUndoMessage = async (msgId: string) => {
+    try {
+      const { error } = await supabase.from('messages').delete().eq('id', msgId);
+      if (error) throw error;
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+      loadConversations(currentUserId || '');
+    } catch (err) {
+      console.error('Error recalling message:', err);
+    }
+  };
+
+  const handleEditMessage = (msgId: string, currentContent: string) => {
+    setEditingMessageId(msgId);
+    setEditingContent(currentContent);
+  };
+
+  const handleSaveEdit = async (msgId: string) => {
+    if (!editingContent.trim()) return;
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ content: editingContent.trim() })
+        .eq('id', msgId);
+
+      if (error) throw error;
+
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, content: editingContent.trim() } : m))
+      );
+      setEditingMessageId(null);
+      loadConversations(currentUserId || '');
+    } catch (err) {
+      console.error('Error editing message:', err);
+    }
+  };
+
+  const handleSendGif = async (gifUrl: string) => {
+    setShowGifPicker(false);
+    if (!activeConvId || !currentUserId) return;
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: activeConvId,
+          sender_id: currentUserId,
+          content: gifUrl,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === data.id)) return prev;
+        return [...prev, data];
+      });
+
+      // Update conversations list preview
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConvId
+            ? { ...c, lastMessage: data, unreadCount: 0 }
+            : c
+        )
+      );
+    } catch (err) {
+      console.error('Error sending GIF:', err);
+    }
+  };
+
+  const selectEmoji = (emoji: string) => {
+    setNewMessage((prev) => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
   // 1. Authenticate user & load initial data
   useEffect(() => {
     async function init() {
@@ -289,41 +383,59 @@ function MessagesPageContent() {
   useEffect(() => {
     if (!currentUserId || !activeConvId) return;
 
-    // Realtime channel for new messages in active thread
+    // Realtime channel for all message events in active thread (INSERT, UPDATE, DELETE)
     const activeChannel = supabase
       .channel(`active_messages:${activeConvId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'messages',
           filter: `conversation_id=eq.${activeConvId}`,
         },
         async (payload) => {
-          const newMsg = payload.new as Message;
-          
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
+          if (payload.eventType === 'INSERT') {
+            const newMsg = payload.new as Message;
+            
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
 
-          // Mark incoming message as read if we are viewing the thread
-          if (newMsg.sender_id !== currentUserId) {
-            await supabase
-              .from('messages')
-              .update({ is_read: true })
-              .eq('id', newMsg.id);
+            // Mark incoming message as read if we are viewing the thread
+            if (newMsg.sender_id !== currentUserId) {
+              await supabase
+                .from('messages')
+                .update({ is_read: true })
+                .eq('id', newMsg.id);
+            }
+
+            // Update last message in sidebar
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === activeConvId
+                  ? { ...c, lastMessage: newMsg, unreadCount: 0 }
+                  : c
+              )
+            );
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedMsg = payload.new as Message;
+            setMessages((prev) =>
+              prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m))
+            );
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === activeConvId
+                  ? { ...c, lastMessage: updatedMsg }
+                  : c
+              )
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const oldMsgId = (payload.old as { id: string }).id;
+            setMessages((prev) => prev.filter((m) => m.id !== oldMsgId));
+            loadConversations(currentUserId);
           }
-
-          // Update last message in sidebar
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === activeConvId
-                ? { ...c, lastMessage: newMsg, unreadCount: 0 }
-                : c
-            )
-          );
         }
       )
       .subscribe();
@@ -662,17 +774,71 @@ function MessagesPageContent() {
                   ) : (
                     messages.map((m) => {
                       const isMe = m.sender_id === currentUserId;
+                      const isGif = m.content.startsWith('http') && m.content.includes('.gif');
+                      const timeDiff = new Date().getTime() - new Date(m.created_at).getTime();
+                      const canEdit = isMe && timeDiff < 60000; // 1 minute window
+                      const isEditing = editingMessageId === m.id;
+
                       return (
                         <div 
                           key={m.id} 
-                          className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+                          className={`flex ${isMe ? 'justify-end' : 'justify-start'} items-center gap-2 group`}
                         >
+                          {/* Undo / Edit Buttons (hover actions for your own messages) */}
+                          {isMe && !isEditing && (
+                            <div className="hidden group-hover:flex items-center gap-1.5 order-first">
+                              {canEdit && (
+                                <button
+                                  onClick={() => handleEditMessage(m.id, m.content)}
+                                  className="p-1 rounded-lg text-slate-400 hover:text-blue-650 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                  title="Edit message"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleUndoMessage(m.id)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                title="Undo / Recall message"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018-8v2M3 10l6 6m-6-6l6-6" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+
                           <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 shadow-sm text-sm ${
                             isMe 
                               ? 'bg-blue-600 text-white rounded-br-none' 
                               : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-105 border border-slate-200/50 dark:border-slate-700/50 rounded-bl-none'
                           }`}>
-                            <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                            {isEditing ? (
+                              <div className="flex flex-col gap-2 w-48">
+                                <input
+                                  type="text"
+                                  value={editingContent}
+                                  onChange={(e) => setEditingContent(e.target.value)}
+                                  className="bg-white/10 dark:bg-slate-950 text-white rounded-lg px-2.5 py-1 text-xs focus:outline-none border border-white/20"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveEdit(m.id);
+                                  }}
+                                />
+                                <div className="flex gap-2 justify-end text-[10px]">
+                                  <button type="button" onClick={() => setEditingMessageId(null)} className="underline opacity-80 cursor-pointer">Cancel</button>
+                                  <button type="button" onClick={() => handleSaveEdit(m.id)} className="font-bold underline cursor-pointer">Save</button>
+                                </div>
+                              </div>
+                            ) : isGif ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={m.content} alt="GIF" className="max-w-48 rounded-lg shadow-sm" />
+                            ) : (
+                              <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                            )}
+
                             <div className={`text-[10px] mt-1 text-right ${
                               isMe ? 'text-blue-200' : 'text-slate-400'
                             }`}>
@@ -691,29 +857,89 @@ function MessagesPageContent() {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Send input box */}
-                <form 
-                  onSubmit={handleSendMessage}
-                  className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center gap-3"
-                >
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Write a message..."
-                    className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-250 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:border-transparent transition-all"
-                  />
-                  <button 
-                    type="submit"
-                    disabled={!newMessage.trim()}
-                    className="h-10 px-5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all shadow-md shadow-blue-500/20 flex items-center gap-1.5 cursor-pointer"
+                {/* Send input box with Emoji / GIF picker popovers */}
+                <div className="relative">
+                  {/* Emoji Picker Popover */}
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-18 left-4 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl rounded-2xl p-3 grid grid-cols-6 gap-2">
+                      {COMMON_EMOJIS.map((emoji) => (
+                        <button 
+                          key={emoji} 
+                          type="button" 
+                          onClick={() => selectEmoji(emoji)} 
+                          className="w-8 h-8 flex items-center justify-center text-sm rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* GIF Picker Popover */}
+                  {showGifPicker && (
+                    <div className="absolute bottom-18 left-4 right-4 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl rounded-2xl p-4 max-h-48 overflow-y-auto space-y-3">
+                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Send a GIF</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {POPULAR_GIFs.map((gif) => (
+                          <button 
+                            key={gif.name} 
+                            type="button" 
+                            onClick={() => handleSendGif(gif.url)} 
+                            className="relative rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 h-16 hover:opacity-90 cursor-pointer"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={gif.url} alt={gif.name} className="w-full h-full object-cover" />
+                            <span className="absolute inset-0 bg-black/40 flex items-center justify-center text-3xs text-white font-bold uppercase">{gif.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <form 
+                    onSubmit={handleSendMessage}
+                    className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center gap-3"
                   >
-                    <span>Send</span>
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                    </svg>
-                  </button>
-                </form>
+                    <div className="flex items-center gap-1">
+                      {/* Emoji Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
+                        className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-lg cursor-pointer"
+                        title="Add Emoji"
+                      >
+                        😀
+                      </button>
+                      {/* GIF Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
+                        className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-extrabold uppercase text-slate-500 dark:text-slate-400 cursor-pointer"
+                        title="Send GIF"
+                      >
+                        Gif
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Write a message..."
+                      className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-250 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:border-transparent transition-all"
+                    />
+                    <button 
+                      type="submit"
+                      disabled={!newMessage.trim()}
+                      className="h-10 px-5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all shadow-md shadow-blue-500/20 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Send</span>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </button>
+                  </form>
+                </div>
               </>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-slate-450 p-6 text-center">
