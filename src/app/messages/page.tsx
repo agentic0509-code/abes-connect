@@ -262,6 +262,18 @@ function MessagesPageContent() {
 
       if (error) throw error;
 
+      // Trigger message notification
+      const activeConversation = conversations.find((c) => c.id === activeConvId);
+      const recipientId = activeConversation?.otherUser?.id;
+      if (recipientId) {
+        await supabase.from('notifications').insert({
+          recipient_id: recipientId,
+          actor_id: currentUserId,
+          type: 'message',
+          reference_id: activeConvId
+        });
+      }
+
       setMessages((prev) => {
         if (prev.some((m) => m.id === data.id)) return prev;
         return [...prev, data];
@@ -509,6 +521,18 @@ function MessagesPageContent() {
         .single();
 
       if (error) throw error;
+
+      // Trigger message notification
+      const activeConversation = conversations.find((c) => c.id === activeConvId);
+      const recipientId = activeConversation?.otherUser?.id;
+      if (recipientId) {
+        await supabase.from('notifications').insert({
+          recipient_id: recipientId,
+          actor_id: currentUserId,
+          type: 'message',
+          reference_id: activeConvId
+        });
+      }
 
       // Optimistically append message to local state
       setMessages((prev) => {

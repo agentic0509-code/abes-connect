@@ -286,6 +286,27 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile, de
 
       if (insertError) throw insertError;
 
+      // Trigger mentions in post content
+      if (newPostContent.includes('@')) {
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name');
+        if (profiles) {
+          for (const p of profiles) {
+            if (p.id === currentUser.id) continue;
+            const fullNameRegex = new RegExp(`@${p.full_name}`, 'i');
+            const firstName = p.full_name.split(' ')[0];
+            const firstNameRegex = new RegExp(`@${firstName}`, 'i');
+            if (fullNameRegex.test(newPostContent) || (firstName.length > 2 && firstNameRegex.test(newPostContent))) {
+              await supabase.from('notifications').insert({
+                recipient_id: p.id,
+                actor_id: currentUser.id,
+                type: 'mention',
+                reference_id: newPostRow.id
+              });
+            }
+          }
+        }
+      }
+
       // 3. Assemble full local Post state
       const assembledPost: Post = {
         ...newPostRow,
@@ -365,6 +386,16 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile, de
           });
 
         if (error) throw error;
+
+        // Trigger reaction notification
+        if (post.author_id !== currentUser.id) {
+          await supabase.from('notifications').insert({
+            recipient_id: post.author_id,
+            actor_id: currentUser.id,
+            type: 'reaction',
+            reference_id: postId
+          });
+        }
 
         const updatedReactions = existingReaction
           ? post.reactions.map((r) => (r.user_id === currentUser.id ? { ...r, type: reactionType } : r))
@@ -486,6 +517,38 @@ export default function Feed({ initialPosts, currentUser, currentUserProfile, de
       );
 
       setNewCommentText({ ...newCommentText, [postId]: '' });
+
+      // Trigger comment notification
+      const parentPost = posts.find(p => p.id === postId);
+      if (parentPost && parentPost.author_id !== currentUser.id) {
+        await supabase.from('notifications').insert({
+          recipient_id: parentPost.author_id,
+          actor_id: currentUser.id,
+          type: 'comment',
+          reference_id: postId
+        });
+      }
+
+      // Trigger mentions in comment content
+      if (commentText.includes('@')) {
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name');
+        if (profiles) {
+          for (const p of profiles) {
+            if (p.id === currentUser.id) continue;
+            const fullNameRegex = new RegExp(`@${p.full_name}`, 'i');
+            const firstName = p.full_name.split(' ')[0];
+            const firstNameRegex = new RegExp(`@${firstName}`, 'i');
+            if (fullNameRegex.test(commentText) || (firstName.length > 2 && firstNameRegex.test(commentText))) {
+              await supabase.from('notifications').insert({
+                recipient_id: p.id,
+                actor_id: currentUser.id,
+                type: 'mention',
+                reference_id: postId
+              });
+            }
+          }
+        }
+      }
 
     } catch (err) {
       console.error('Error adding comment:', err);

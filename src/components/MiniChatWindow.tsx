@@ -175,6 +175,14 @@ export default function MiniChatWindow({
 
       if (error) throw error;
 
+      // Trigger message notification
+      await supabase.from('notifications').insert({
+        recipient_id: otherUser.id,
+        actor_id: currentUserId,
+        type: 'message',
+        reference_id: conversationId
+      });
+
       setMessages((prev) => {
         if (prev.some((m) => m.id === data.id)) return prev;
         return [...prev, data];
@@ -199,6 +207,14 @@ export default function MiniChatWindow({
         .single();
 
       if (error) throw error;
+
+      // Trigger message notification
+      await supabase.from('notifications').insert({
+        recipient_id: otherUser.id,
+        actor_id: currentUserId,
+        type: 'message',
+        reference_id: conversationId
+      });
 
       setMessages((prev) => {
         if (prev.some((m) => m.id === data.id)) return prev;

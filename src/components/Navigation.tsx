@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -10,6 +10,21 @@ interface Profile {
   id: string;
   full_name: string;
   profile_photo_url: string | null;
+}
+
+interface Notification {
+  id: string;
+  recipient_id: string;
+  actor_id: string;
+  type: 'reaction' | 'comment' | 'connection_request' | 'connection_accepted' | 'mention' | 'message';
+  reference_id: string | null;
+  is_read: boolean;
+  created_at: string;
+  actor: {
+    id: string;
+    full_name: string;
+    profile_photo_url: string | null;
+  } | null;
 }
 
 export default function Navigation() {
@@ -23,8 +38,110 @@ export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
+  // Notifications states
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+
   const defaultAvatar = (name: string) => 
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
+
+  const loadNotifications = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select(`
+          *,
+          actor:profiles!notifications_actor_id_fkey(id, full_name, profile_photo_url)
+        `)
+        .eq('recipient_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setNotifications(data);
+        setUnreadNotifCount(data.filter((n) => !n.is_read).length);
+      }
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+    }
+  }, [supabase]);
+
+  const handleMarkAllRead = async () => {
+    if (!currentUserId) return;
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('recipient_id', currentUserId)
+        .eq('is_read', false);
+
+      if (error) throw error;
+
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadNotifCount(0);
+    } catch (err) {
+      console.error('Error marking all read:', err);
+    }
+  };
+
+  const handleNotificationClick = async (notif: Notification) => {
+    if (!notif.is_read) {
+      try {
+        await supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .eq('id', notif.id);
+        
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
+        );
+        setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+      } catch (err) {
+        console.error('Error marking notification read:', err);
+      }
+    }
+
+    setNotifDropdownOpen(false);
+
+    if (notif.type === 'message') {
+      router.push(`/messages?convId=${notif.reference_id}`);
+    } else if (notif.type === 'connection_request') {
+      router.push('/requests');
+    } else if (notif.type === 'connection_accepted') {
+      router.push(`/profile/${notif.actor_id}`);
+    } else if (notif.type === 'reaction' || notif.type === 'comment' || notif.type === 'mention') {
+      router.push('/home');
+    }
+  };
+
+  const getNotificationText = (notif: Notification) => {
+    const name = notif.actor?.full_name || 'Someone';
+    if (notif.type === 'reaction') return `${name} reacted to your post`;
+    if (notif.type === 'comment') return `${name} commented on your post`;
+    if (notif.type === 'connection_request') return `${name} sent you a connection request`;
+    if (notif.type === 'connection_accepted') return `${name} accepted your connection request`;
+    if (notif.type === 'mention') return `${name} mentioned you in a post`;
+    if (notif.type === 'message') return `${name} sent you a message`;
+    return `${name} triggered an action`;
+  };
+
+  const getElapsedTime = (isoString: string) => {
+    const created = new Date(isoString).getTime();
+    const now = new Date().getTime();
+    const diffMs = now - created;
+
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  };
 
   useEffect(() => {
     async function loadSessionAndData() {
@@ -34,7 +151,6 @@ export default function Navigation() {
 
         setCurrentUserId(user.id);
 
-        // 1. Fetch user profile details
         const { data: profileData } = await supabase
           .from('profiles')
           .select('id, full_name, profile_photo_url')
@@ -45,7 +161,6 @@ export default function Navigation() {
           setProfile(profileData);
         }
 
-        // 2. Fetch pending requests count
         const { count } = await supabase
           .from('connections')
           .select('*', { count: 'exact', head: true })
@@ -61,6 +176,35 @@ export default function Navigation() {
 
     loadSessionAndData();
   }, [supabase]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    // Defer state update to next tick to satisfy eslint rule
+    setTimeout(() => {
+      loadNotifications(currentUserId);
+    }, 0);
+
+    const channel = supabase
+      .channel(`notifs:${currentUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${currentUserId}`,
+        },
+        () => {
+          loadNotifications(currentUserId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, supabase, loadNotifications]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -130,8 +274,19 @@ export default function Navigation() {
       )
     },
     { 
+      name: 'Notifications', 
+      href: '#',
+      badge: unreadNotifCount > 0 ? unreadNotifCount : undefined,
+      icon: (
+        <svg className="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+      )
+    },
+    { 
       name: 'Messaging', 
       href: '/messages',
+      badge: undefined,
       icon: (
         <svg className="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -176,6 +331,95 @@ export default function Navigation() {
         <nav className="hidden md:flex items-center gap-1.5 h-full">
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
+            const isNotifications = link.name === 'Notifications';
+
+            const linkContent = (
+              <>
+                <div className="relative">
+                  {link.icon}
+                  {link.badge && (
+                    <span className="absolute -top-1.5 -right-2 px-1 py-0.5 bg-red-500 text-white rounded-full text-[8px] font-black leading-none">
+                      {link.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] font-semibold mt-1 tracking-tight">{link.name}</span>
+              </>
+            );
+
+            if (isNotifications) {
+              return (
+                <div key={link.name} className="relative h-full flex flex-col items-center">
+                  <button
+                    onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+                    className={`h-14 flex flex-col items-center justify-center min-w-16 px-1 text-center transition-colors relative border-b-2 cursor-pointer ${
+                      notifDropdownOpen 
+                        ? 'text-slate-900 border-slate-900 dark:text-white dark:border-white' 
+                        : 'text-slate-500 border-transparent hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    {linkContent}
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {notifDropdownOpen && (
+                    <div className="absolute top-14 right-0 z-50 w-80 bg-white dark:bg-[#1d2226] border border-[#dfdfdf] dark:border-slate-800 shadow-2xl rounded-b-xl overflow-hidden py-1">
+                      <div className="px-4 py-2 border-b border-[#dfdfdf] dark:border-slate-800 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 dark:text-white">Notifications</span>
+                        {unreadNotifCount > 0 && (
+                          <button
+                            onClick={handleMarkAllRead}
+                            className="text-[10px] font-extrabold text-[#0a66c2] hover:underline cursor-pointer"
+                          >
+                            Mark all as read
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-72 overflow-y-auto divide-y divide-[#dfdfdf] dark:divide-slate-800">
+                        {notifications.length === 0 ? (
+                          <div className="p-4 text-center text-slate-400 text-xs">
+                            No notifications yet
+                          </div>
+                        ) : (
+                          notifications.map((notif) => (
+                            <div
+                              key={notif.id}
+                              onClick={() => handleNotificationClick(notif)}
+                              className={`p-3 flex items-start gap-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors text-left ${
+                                !notif.is_read ? 'bg-blue-50/30 dark:bg-blue-955/10' : ''
+                              }`}
+                            >
+                              <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-slate-100 dark:border-slate-800">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={notif.actor?.profile_photo_url || defaultAvatar(notif.actor?.full_name || 'Member')}
+                                  alt="Actor photo"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-[10.5px] text-slate-700 dark:text-slate-350 leading-snug break-words ${
+                                  !notif.is_read ? 'font-bold text-slate-900 dark:text-white' : ''
+                                }`}>
+                                  {getNotificationText(notif)}
+                                </p>
+                                <span className="text-[9px] text-slate-400 block mt-1">
+                                  {getElapsedTime(notif.created_at)}
+                                </span>
+                              </div>
+                              {!notif.is_read && (
+                                <span className="w-1.5 h-1.5 bg-blue-600 rounded-full shrink-0 mt-1.5" />
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
               <Link
                 key={link.name}
@@ -186,15 +430,7 @@ export default function Navigation() {
                     : 'text-slate-500 border-transparent hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                 }`}
               >
-                <div className="relative">
-                  {link.icon}
-                  {link.badge && (
-                    <span className="absolute -top-1.5 -right-2 px-1 py-0.5 bg-red-500 text-white rounded-full text-[8px] font-black leading-none">
-                      {link.badge}
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] font-semibold mt-1 tracking-tight">{link.name}</span>
+                {linkContent}
               </Link>
             );
           })}

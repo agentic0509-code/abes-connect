@@ -92,6 +92,14 @@ export default function RequestsPage() {
 
       if (updateError) throw updateError;
 
+      // Trigger connection accepted notification
+      await supabase.from('notifications').insert({
+        recipient_id: requesterId,
+        actor_id: currentUserId,
+        type: 'connection_accepted',
+        reference_id: currentUserId
+      });
+
       // Remove from state list
       setIncomingRequests(incomingRequests.filter((r) => r.id !== requesterId));
     } catch (err) {

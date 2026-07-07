@@ -31,6 +31,14 @@ export default function ConnectButton({
 
       if (error) throw error;
       setStatus('pending_sent');
+
+      // Trigger connection request notification
+      await supabase.from('notifications').insert({
+        recipient_id: profileId,
+        actor_id: currentUserId,
+        type: 'connection_request',
+        reference_id: currentUserId
+      });
     } catch (err) {
       console.error('Error sending connection request:', err);
       alert('Failed to send connection request.');
@@ -50,6 +58,14 @@ export default function ConnectButton({
 
       if (error) throw error;
       setStatus('connected');
+
+      // Trigger connection accepted notification
+      await supabase.from('notifications').insert({
+        recipient_id: profileId,
+        actor_id: currentUserId,
+        type: 'connection_accepted',
+        reference_id: currentUserId
+      });
     } catch (err) {
       console.error('Error accepting connection:', err);
       alert('Failed to accept connection request.');

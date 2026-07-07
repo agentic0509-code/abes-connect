@@ -99,6 +99,14 @@ export default function DirectoryPage() {
 
       if (insertError) throw insertError;
 
+      // Trigger connection request notification
+      await supabase.from('notifications').insert({
+        recipient_id: targetId,
+        actor_id: currentUserId,
+        type: 'connection_request',
+        reference_id: currentUserId
+      });
+
       // Update local connections state
       setConnections([
         ...connections,
@@ -128,14 +136,19 @@ export default function DirectoryPage() {
 
       if (updateError) throw updateError;
 
+      // Trigger connection accepted notification
+      await supabase.from('notifications').insert({
+        recipient_id: targetId,
+        actor_id: currentUserId,
+        type: 'connection_accepted',
+        reference_id: currentUserId
+      });
+
       // Update local state
-      setConnections(
-        connections.map((c) =>
-          c.requester_id === targetId && c.receiver_id === currentUserId
-            ? { ...c, status: 'accepted' }
-            : c
-        )
-      );
+      setConnections([
+        ...connections.filter(c => !(c.requester_id === targetId && c.receiver_id === currentUserId)),
+        { requester_id: targetId, receiver_id: currentUserId, status: 'accepted' }
+      ]);
     } catch (err) {
       console.error('Error accepting connection:', err);
       const errMsg = err && typeof err === 'object' && 'message' in err
